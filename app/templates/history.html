@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}機番履歴表示 - 機器情報可視化{% endblock %}
+
+{% block content %}
+<div class="history-container">
+    <!-- 左パネル: 条件設定 -->
+    <aside class="side-panel">
+        <div class="panel-section">
+            <h3 class="section-title">プリセット</h3>
+            <div class="form-group">
+                <select id="preset-select" class="form-select">
+                    <option value="">プリセットを選択</option>
+                </select>
+            </div>
+            <div class="btn-group">
+                <button id="save-preset-btn" class="btn btn-secondary btn-sm">保存</button>
+                <button id="delete-preset-btn" class="btn btn-danger btn-sm">削除</button>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <h3 class="section-title">機番入力</h3>
+            <div class="form-group">
+                <input type="text" id="machine-number" class="form-input" placeholder="機番を入力（例: MC-12345）">
+                <button id="load-data-btn" class="btn btn-primary">データ読み込み</button>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <h3 class="section-title">データ選択</h3>
+            <div class="form-group">
+                <label class="form-label">表示データ</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-events" checked> イベント情報
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-attributes"> 機番属性
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-characteristics" checked> 特性値
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-section" id="characteristic-settings">
+            <h3 class="section-title">特性値設定</h3>
+            <div class="form-group">
+                <label class="form-label">カテゴリー</label>
+                <select id="category-select" class="form-select">
+                    <option value="">選択してください</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">特性値ID</label>
+                <select id="characteristic-select" class="form-select" disabled>
+                    <option value="">カテゴリーを選択してください</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">グラフ種別</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="chart-type" value="line" checked> 折れ線グラフ
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="chart-type" value="color"> カラーチャート
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">X軸タイプ</label>
+                <select id="x-axis-type" class="form-select">
+                    <option value="monthly">時間（月次）</option>
+                    <option value="daily">時間（日次）</option>
+                    <option value="usage">使用回数</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="panel-section" id="annotation-settings">
+            <h3 class="section-title">アノテーション</h3>
+            <div class="checkbox-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" class="annotation-toggle" data-type="FW更新" checked> FW更新
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" class="annotation-toggle" data-type="部品交換" checked> 部品交換
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" class="annotation-toggle" data-type="メンテナンス" checked> メンテナンス
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" class="annotation-toggle" data-type="不具合発生" checked> 不具合発生
+                </label>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 中央エリア: グラフ表示 -->
+    <section class="main-panel">
+        <div class="chart-header">
+            <h2 id="chart-title">特性値推移</h2>
+            <div class="chart-controls">
+                <button id="copy-url-btn" class="btn btn-sm btn-secondary">URLをコピー</button>
+                <button id="zoom-reset-btn" class="btn btn-sm">ズームリセット</button>
+                <span id="current-range" class="range-badge"></span>
+            </div>
+        </div>
+
+        <!-- 機番属性表示 -->
+        <div id="machine-info" class="info-card" style="display: none;">
+            <h3>機番属性</h3>
+            <div class="info-grid" id="machine-info-content"></div>
+        </div>
+
+        <!-- イベント一覧表示 -->
+        <div id="events-table-container" class="table-container" style="display: none;">
+            <h3>イベント情報</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>日付</th>
+                        <th>種別</th>
+                        <th>コード</th>
+                        <th>分類</th>
+                        <th>説明</th>
+                        <th>FWバージョン</th>
+                        <th>使用回数</th>
+                    </tr>
+                </thead>
+                <tbody id="events-table-body"></tbody>
+            </table>
+        </div>
+
+        <!-- メインチャート -->
+        <div id="main-chart" class="main-chart"></div>
+
+        <!-- ローディング -->
+        <div id="loading" class="loading-overlay" style="display: none;">
+            <div class="loading-spinner"></div>
+        </div>
+    </section>
+
+    <!-- 下部エリア: 詳細データ -->
+    <section class="detail-panel">
+        <div class="detail-header">
+            <h3>詳細データ</h3>
+            <div class="detail-controls">
+                <select id="page-size" class="form-select form-select-sm">
+                    <option value="10">10件</option>
+                    <option value="20" selected>20件</option>
+                    <option value="50">50件</option>
+                    <option value="100">100件</option>
+                </select>
+                <button id="download-csv-btn" class="btn btn-secondary btn-sm">CSVダウンロード</button>
+            </div>
+        </div>
+
+        <table class="data-table" id="detail-table">
+            <thead>
+                <tr>
+                    <th class="sortable" data-sort="date">日付 <span class="sort-icon"></span></th>
+                    <th class="sortable" data-sort="value">値 <span class="sort-icon"></span></th>
+                    <th>使用回数</th>
+                </tr>
+            </thead>
+            <tbody id="detail-table-body"></tbody>
+        </table>
+
+        <div class="pagination">
+            <button id="prev-page" class="btn btn-sm" disabled>前へ</button>
+            <span class="page-info">
+                <input type="number" id="page-input" class="page-input" value="1" min="1">
+                / <span id="total-pages">1</span> ページ
+            </span>
+            <button id="next-page" class="btn btn-sm">次へ</button>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/history.js"></script>
+{% endblock %}
