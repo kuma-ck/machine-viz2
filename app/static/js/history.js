@@ -511,23 +511,32 @@ function renderLineChart() {
     const yAxisData = data.map(d => d.value_numeric);
 
     // イベント散布図データ作成
+    // イベント散布図データ作成
     const eventSeriesData = [];
     const eventCategories = ['FW更新', '部品交換', 'メンテナンス', '不具合発生'];
 
-    if (state.xAxisType !== 'usage') {
-        state.events.forEach(event => {
-            if (state.annotations[event.event_type]) {
-                const yIndex = eventCategories.indexOf(event.event_type);
-                if (yIndex !== -1) {
-                    eventSeriesData.push({
-                        value: [event.event_date, event.event_type], // [x, y]
-                        itemStyle: { color: getEventColor(event.event_type) },
-                        eventInfo: event // ツールチップ用
-                    });
+    // 使用回数軸の場合でもイベントを表示する
+    state.events.forEach(event => {
+        if (state.annotations[event.event_type]) {
+            const yIndex = eventCategories.indexOf(event.event_type);
+            if (yIndex !== -1) {
+                let xValue = event.event_date;
+
+                // 使用回数軸の場合は日付から使用回致を推定
+                if (state.xAxisType === 'usage') {
+                    xValue = estimateUsageCount(event.event_date);
+                    // 推定できなかった場合（データ範囲外など）は表示しない
+                    if (xValue === null) return;
                 }
+
+                eventSeriesData.push({
+                    value: [xValue, event.event_type], // [x, y]
+                    itemStyle: { color: getEventColor(event.event_type) },
+                    eventInfo: event // ツールチップ用
+                });
             }
-        });
-    }
+        }
+    });
 
     const option = {
         tooltip: {
@@ -578,7 +587,9 @@ function renderLineChart() {
                     formatter: state.xAxisType === 'usage' ? (v) => v.toLocaleString() : undefined,
                     margin: 14
                 },
-                position: 'bottom'
+                position: 'bottom',
+                min: state.xAxisType === 'usage' ? (v) => v.min : undefined,
+                max: state.xAxisType === 'usage' ? (v) => v.max : undefined
             }
         ],
         yAxis: [
@@ -649,23 +660,38 @@ function renderColorChart() {
         : data.map(d => d.record_date);
 
     // イベント散布図データ作成
+
+    // イベント散布図データ作成
     const eventSeriesData = [];
     const eventCategories = ['FW更新', '部品交換', 'メンテナンス', '不具合発生'];
 
-    if (state.xAxisType !== 'usage') {
-        state.events.forEach(event => {
-            if (state.annotations[event.event_type]) {
-                const yIndex = eventCategories.indexOf(event.event_type);
-                if (yIndex !== -1) {
-                    eventSeriesData.push({
-                        value: [event.event_date, event.event_type], // [x, y]
-                        itemStyle: { color: getEventColor(event.event_type) },
-                        eventInfo: event // ツールチップ用
-                    });
+    // 使用回数軸の場合でもイベントを表示する
+    state.events.forEach(event => {
+        if (state.annotations[event.event_type]) {
+            const yIndex = eventCategories.indexOf(event.event_type);
+            if (yIndex !== -1) {
+                let xValue = event.event_date;
+
+                // 使用回数軸の場合は日付から使用回致を推定
+                // ColorChartの場合はxAxisがcategoryなので、xAxisDataに含まれる値（使用回数）と一致させる必要がある
+                if (state.xAxisType === 'usage') {
+                    const estimated = estimateUsageCount(event.event_date);
+                    if (estimated !== null) {
+                        // 最も近い値を検索
+                        xValue = findClosestUsage(estimated, xAxisData);
+                    } else {
+                        return;
+                    }
                 }
+
+                eventSeriesData.push({
+                    value: [xValue, event.event_type], // [x, y]
+                    itemStyle: { color: getEventColor(event.event_type) },
+                    eventInfo: event // ツールチップ用
+                });
             }
-        });
-    }
+        }
+    });
 
     // 質的変数がある場合
     const hasQualitative = data.some(d => d.value_text);
@@ -1137,6 +1163,62 @@ function loadFromURL() {
     if (machine) {
         loadData();
     }
+}
+
+// 日付から使用回数を推定（線形補間）
+function estimateUsageCount(dateStr) {
+    if (!state.characteristics.length) return null;
+
+    // 日付でソートされていると仮定（または再ソート）
+    // APIは日付順で返すが、念のため
+    // ここではstate.characteristicsが既にロードされているものを使用
+    // 単純化のため、データが日付順であることを前提とする
+
+    const data = state.characteristics;
+    const targetDate = new Date(dateStr).getTime();
+
+    // 範囲外チェック
+    const firstDate = new Date(data[0].record_date).getTime();
+    const lastDate = new Date(data[data.length - 1].record_date).getTime();
+
+    if (targetDate < firstDate) return data[0].usage_count; // データ以前の場合は最初の使用回数
+    if (targetDate > lastDate) return data[data.length - 1].usage_count; // データ以後の場合は最後の使用回数
+
+    // 二分探索などで探索可能だが、データ量次第。ここでは線形探索で実装
+    for (let i = 0; i < data.length - 1; i++) {
+        const d1 = new Date(data[i].record_date).getTime();
+        const d2 = new Date(data[i + 1].record_date).getTime();
+
+        if (targetDate >= d1 && targetDate <= d2) {
+            // 区間発見、線形補間
+            if (d1 === d2) return data[i].usage_count;
+
+            const ratio = (targetDate - d1) / (d2 - d1);
+            const u1 = data[i].usage_count;
+            const u2 = data[i + 1].usage_count;
+
+            return Math.round(u1 + (u2 - u1) * ratio);
+        }
+    }
+
+    return null;
+}
+
+// 最も近い使用回数（カテゴリ値）を探す
+function findClosestUsage(target, usageList) {
+    // usageListは数値または数値文字列の配列
+    let closest = usageList[0];
+    let minDiff = Math.abs(target - Number(usageList[0]));
+
+    for (let i = 1; i < usageList.length; i++) {
+        const val = Number(usageList[i]);
+        const diff = Math.abs(target - val);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closest = usageList[i];
+        }
+    }
+    return closest;
 }
 
 function copyURL() {
