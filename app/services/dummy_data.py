@@ -122,20 +122,24 @@ def generate_dummy_characteristics(
     x_axis_type: str = "monthly",
 ) -> list[dict]:
     """ダミー特性値を生成"""
+    # シード値を設定して再現性を確保
+    seed_str = f"{machine_number}_{category}_{characteristic_id}_{x_axis_type}"
+    rng = random.Random(seed_str)
+
     if start_date is None:
         start_date = date(2021, 1, 1)
     if end_date is None:
         end_date = date(2024, 12, 31)
     
-    # カテゴリーが指定されていない場合はランダムに選択
+    # カテゴリーが指定されていない場合はランダムに選択（シードに基づく）
     if category is None:
-        category = random.choice(CHARACTERISTIC_CATEGORIES)
+        category = rng.choice(CHARACTERISTIC_CATEGORIES)
     
     # 特性値IDが指定されていない場合
     is_qualitative = False
     if characteristic_id is None:
         # 量的変数をデフォルト
-        characteristic_id = random.choice(CHARACTERISTIC_IDS.get(category, ["温度"]))
+        characteristic_id = rng.choice(CHARACTERISTIC_IDS.get(category, ["温度"]))
     else:
         # 質的変数かどうかチェック
         if category in QUALITATIVE_CHARACTERISTIC_IDS:
@@ -149,10 +153,10 @@ def generate_dummy_characteristics(
         # 月次データ
         current = start_date.replace(day=1)
         while current <= end_date:
-            usage_count += random.randint(5000, 20000)
+            usage_count += rng.randint(5000, 20000)
             
             if is_qualitative:
-                value_text = random.choice(QUALITATIVE_VALUES.get(characteristic_id, ["正常"]))
+                value_text = rng.choice(QUALITATIVE_VALUES.get(characteristic_id, ["正常"]))
                 value_numeric = None
             else:
                 # 量的変数は正規分布に従ったデータ
@@ -171,7 +175,7 @@ def generate_dummy_characteristics(
                     "電流": 10,
                     "消費電力": 500,
                 }.get(characteristic_id, 50)
-                value_numeric = base_value + random.gauss(0, base_value * 0.1)
+                value_numeric = base_value + rng.gauss(0, base_value * 0.1)
                 value_text = None
             
             values.append({
@@ -195,14 +199,14 @@ def generate_dummy_characteristics(
         days = min((end_date - start_date).days, 60)
         for i in range(days):
             current = start_date + timedelta(days=i)
-            usage_count += random.randint(100, 500)
+            usage_count += rng.randint(100, 500)
             
             if is_qualitative:
-                value_text = random.choice(QUALITATIVE_VALUES.get(characteristic_id, ["正常"]))
+                value_text = rng.choice(QUALITATIVE_VALUES.get(characteristic_id, ["正常"]))
                 value_numeric = None
             else:
                 base_value = 50
-                value_numeric = base_value + random.gauss(0, 5)
+                value_numeric = base_value + rng.gauss(0, 5)
                 value_text = None
             
             values.append({
@@ -218,18 +222,18 @@ def generate_dummy_characteristics(
     elif x_axis_type == "usage":
         # 使用回数ベース
         for _ in range(50):
-            usage_count += random.randint(10000, 30000)
+            usage_count += rng.randint(10000, 30000)
             if usage_count > 1000000:
                 break
             
             if is_qualitative:
-                value_text = random.choice(QUALITATIVE_VALUES.get(characteristic_id, ["正常"]))
+                value_text = rng.choice(QUALITATIVE_VALUES.get(characteristic_id, ["正常"]))
                 value_numeric = None
             else:
                 base_value = 50
                 # 使用回数が増えると値が変化する傾向
                 trend = usage_count / 1000000 * 10
-                value_numeric = base_value + trend + random.gauss(0, 3)
+                value_numeric = base_value + trend + rng.gauss(0, 3)
                 value_text = None
             
             values.append({

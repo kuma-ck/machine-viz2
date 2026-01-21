@@ -27,66 +27,114 @@
     </header>
 
     <!-- フィルターバー -->
-    <div class="filter-bar">
-        <div class="filter-group">
-            <label>カテゴリー</label>
-            <select id="category-select" class="form-select form-select-sm">
-                <option value="">選択</option>
-                {% for cat in categories %}
-                <option value="{{ cat }}">{{ cat }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="filter-group">
-            <label>特性値</label>
-            <select id="characteristic-select" class="form-select form-select-sm" disabled>
-                <option value="">選択</option>
-            </select>
-        </div>
-        <div class="filter-group">
-            <label>集計</label>
-            <select id="aggregation-method" class="form-select form-select-sm">
-                <option value="latest">最新</option>
-                <option value="avg">平均</option>
-                <option value="max">最大</option>
-                <option value="min">最小</option>
-            </select>
-        </div>
-        <div class="filter-divider"></div>
-        <div class="filter-group">
-            <label>グラフ</label>
-            <div class="btn-toggle">
-                <input type="radio" name="chart-type" value="line" id="chart-line" checked>
-                <label for="chart-line">折れ線</label>
-                <input type="radio" name="chart-type" value="color" id="chart-color">
-                <label for="chart-color">カラー</label>
+    <!-- フィルターバー -->
+    <div class="filter-bar no-wrap-layout">
+        <!-- 上段：クエリ設定（系列1・系列2） -->
+        <div class="filter-row-primary">
+            <!-- 系列1 -->
+            <div id="series-1-container" class="series-container">
+                <div class="filter-group">
+                    <label>カテゴリー1</label>
+                    <select id="category-select-1" class="form-select form-select-sm">
+                        <option value="">選択</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}">{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>特性値1</label>
+                    <select id="characteristic-select-1" class="form-select form-select-sm" disabled>
+                        <option value="">選択</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>集計1</label>
+                    <select id="aggregation-method-1" class="form-select form-select-sm">
+                        <option value="latest">最新</option>
+                        <option value="avg">平均</option>
+                        <option value="max">最大</option>
+                        <option value="min">最小</option>
+                    </select>
+                </div>
+                <div class="filter-divider"></div>
             </div>
-        </div>
-        <div class="filter-group">
-            <label>X軸</label>
-            <select id="x-axis-type" class="form-select form-select-sm">
-                <option value="monthly">月次</option>
-                <option value="daily">日次</option>
-                <option value="usage">使用回数</option>
-            </select>
-            <div id="date-range-container" style="display: none; align-items: center; gap: 4px; margin-left: 8px;">
-                <input type="date" id="start-date" class="form-input form-input-sm" style="width: 110px;">
-                <span>~</span>
-                <input type="date" id="end-date" class="form-input form-input-sm" style="width: 110px;">
+
+            <!-- 系列2 -->
+            <div id="series-2-container" class="series-container" style="display: none;">
+                <div class="filter-group">
+                    <label style="color: var(--color-primary);">カテゴリー2</label>
+                    <select id="category-select-2" class="form-select form-select-sm">
+                        <option value="">選択</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}">{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label style="color: var(--color-primary);">特性値2</label>
+                    <select id="characteristic-select-2" class="form-select form-select-sm" disabled>
+                        <option value="">選択</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label style="color: var(--color-primary);">集計2</label>
+                    <select id="aggregation-method-2" class="form-select form-select-sm">
+                        <option value="latest">最新</option>
+                        <option value="avg">平均</option>
+                        <option value="max">最大</option>
+                        <option value="min">最小</option>
+                    </select>
+                </div>
+                <button id="remove-series-btn" class="btn btn-sm btn-danger" title="系列を削除"
+                    style="padding: 2px 6px;">×</button>
             </div>
+
+            <button id="add-series-btn" class="btn btn-sm btn-secondary" title="系列を追加">+ 系列を追加</button>
         </div>
-        <div style="width: 100%;"></div>
-        <div class="filter-group annotation-group">
-            <label>アノテーション</label>
-            <div class="annotation-toggles">
-                <label class="chip"><input type="checkbox" class="annotation-toggle" data-type="FW更新" checked>
-                    FW更新</label>
-                <label class="chip"><input type="checkbox" class="annotation-toggle" data-type="部品交換" checked>
-                    部品交換</label>
-                <label class="chip"><input type="checkbox" class="annotation-toggle" data-type="メンテナンス" checked>
-                    メンテナンス</label>
-                <label class="chip"><input type="checkbox" class="annotation-toggle" data-type="不具合発生" checked>
-                    不具合発生</label>
+
+        <!-- 下段：表示設定（グラフ、X軸、アノテーション） -->
+        <div class="filter-row-secondary">
+            <div class="filter-group">
+                <label>グラフ</label>
+                <div class="btn-toggle">
+                    <input type="radio" name="chart-type" value="line" id="chart-line" checked>
+                    <label for="chart-line">折れ線</label>
+                    <input type="radio" name="chart-type" value="color" id="chart-color">
+                    <label for="chart-color">カラー</label>
+                </div>
+            </div>
+
+            <div class="filter-divider"></div>
+
+            <div class="filter-group">
+                <label>X軸</label>
+                <select id="x-axis-type" class="form-select form-select-sm">
+                    <option value="monthly">月次</option>
+                    <option value="daily">日次</option>
+                    <option value="usage">使用回数</option>
+                </select>
+                <div id="date-range-container" style="display: none; align-items: center; gap: 4px; margin-left: 8px;">
+                    <input type="date" id="start-date" class="form-input form-input-sm" style="width: 110px;">
+                    <span>~</span>
+                    <input type="date" id="end-date" class="form-input form-input-sm" style="width: 110px;">
+                </div>
+            </div>
+
+            <div class="filter-divider"></div>
+
+            <div class="filter-group annotation-group">
+                <label>アノテーション</label>
+                <div class="annotation-toggles">
+                    <label class="chip"><input type="checkbox" class="annotation-toggle" data-type="FW更新" checked>
+                        FW更新</label>
+                    <label class="chip"><input type="checkbox" class="annotation-toggle" data-type="部品交換" checked>
+                        部品交換</label>
+                    <label class="chip"><input type="checkbox" class="annotation-toggle" data-type="メンテナンス" checked>
+                        メンテナンス</label>
+                    <label class="chip"><input type="checkbox" class="annotation-toggle" data-type="不具合発生" checked>
+                        不具合発生</label>
+                </div>
             </div>
         </div>
     </div>

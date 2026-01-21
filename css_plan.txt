@@ -1,0 +1,15 @@
+/* style.css */
+.series-container {
+    display: flex;
+    gap: var(--spacing-sm); /* Reduced from md */
+    align-items: center;
+}
+
+.filter-bar {
+    gap: var(--spacing-sm); /* Reduced from md */
+}
+
+/* history.html */
+/* Remove inline styles from series-container */
+/* Possibly shorten labels: "カテゴリー1" -> "カテゴリ1", "特性値1" -> "特性1" ? User might prefer full text. */
+/* Just spacing reduction should be enough for standard desktop 1200px+ width. */

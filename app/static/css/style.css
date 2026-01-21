@@ -159,13 +159,28 @@ body {
 /* フィルターバー */
 .filter-bar {
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--spacing-md);
+    flex-direction: column;
+    /* 2段構成にするため縦並び */
+    align-items: stretch;
+    gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-md);
     background: var(--bg-primary);
     border-radius: var(--border-radius);
     box-shadow: var(--shadow);
+}
+
+.filter-row-primary,
+.filter-row-secondary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+}
+
+.series-container {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
 }
 
 .filter-group {

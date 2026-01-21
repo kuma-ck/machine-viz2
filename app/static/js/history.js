@@ -10,12 +10,26 @@ const state = {
     machineNumber: '',
     machineInfo: null,
     events: [],
-    characteristics: [],
+    machineNumber: '',
+    machineInfo: null,
+    events: [],
+    // characteristics: [], // getter/setterに移行
     chartType: 'line',
     xAxisType: 'monthly',
-    category: '',
-    characteristicId: '',
-    aggregationMethod: 'latest',
+    // 複数系列対応
+    series: [
+        { id: 1, category: '', characteristicId: '', aggregationMethod: 'latest', data: [], visible: true },
+        { id: 2, category: '', characteristicId: '', aggregationMethod: 'latest', data: [], visible: false }
+    ],
+    // 互換性のため（主に系列1を参照）
+    get category() { return this.series[0].category; },
+    set category(v) { this.series[0].category = v; },
+    get characteristicId() { return this.series[0].characteristicId; },
+    set characteristicId(v) { this.series[0].characteristicId = v; },
+    get aggregationMethod() { return this.series[0].aggregationMethod; },
+    set aggregationMethod(v) { this.series[0].aggregationMethod = v; },
+    get characteristics() { return this.series[0].data; },
+    set characteristics(v) { this.series[0].data = v; },
     startDate: '',
     endDate: '',
     viewStartDate: '', // 現在表示中の範囲（開始）
@@ -43,10 +57,10 @@ let mainChart = null;
 // 初期化
 // ===================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initCharts();
     initEventListeners();
-    loadFromURL();
+    await loadFromURL();
     loadPresets();
 });
 
@@ -103,38 +117,28 @@ function initCharts() {
 
 function initEventListeners() {
     // データ読み込み
-    document.getElementById('load-data-btn')?.addEventListener('click', loadData);
-    document.getElementById('machine-number')?.addEventListener('keypress', (e) => {
+    document.getElementById('load-data-btn').addEventListener('click', loadData);
+    document.getElementById('machine-number').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') loadData();
     });
 
-    // カテゴリー変更
-    document.getElementById('category-select')?.addEventListener('change', async (e) => {
-        state.category = e.target.value;
-        await updateCharacteristicOptions();
-    });
+    // 系列1イベントリスナー
+    setupSeriesListeners(1);
+    // 系列2イベントリスナー
+    setupSeriesListeners(2);
 
-    // 特性値ID変更（自動更新）
-    document.getElementById('characteristic-select')?.addEventListener('change', (e) => {
-        state.characteristicId = e.target.value;
-        if (state.machineNumber && state.characteristicId) {
-            loadCharacteristicsAndShowChart();
-        }
-    });
+    // 系列追加・削除ボタン
+    document.getElementById('add-series-btn')?.addEventListener('click', () => toggleSeries2(true));
+    document.getElementById('remove-series-btn')?.addEventListener('click', () => toggleSeries2(false));
 
-    // 集計方法変更（自動更新）
-    document.getElementById('aggregation-method')?.addEventListener('change', (e) => {
-        state.aggregationMethod = e.target.value;
-        if (state.machineNumber && state.characteristicId) {
-            loadCharacteristicsAndShowChart();
-        }
-    });
-
-    // グラフ種別変更
+    // グラフタイプ変更
     document.querySelectorAll('input[name="chart-type"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
             state.chartType = e.target.value;
+            // カラーチャートの場合は系列2を無効化（UI上は隠すか、動作しないようにする）
+            // ここでは再描画のみ
             renderChart();
+            updateURL();
         });
     });
 
@@ -165,7 +169,9 @@ function initEventListeners() {
         if (state.machineNumber) {
             loadCharacteristics();
         }
+        updateURL();
     });
+
 
     // 日付範囲変更
     const onDateChange = () => {
@@ -174,14 +180,16 @@ function initEventListeners() {
         if (state.machineNumber) {
             loadCharacteristics();
         }
+        updateURL();
     };
     document.getElementById('start-date')?.addEventListener('change', onDateChange);
     document.getElementById('end-date')?.addEventListener('change', onDateChange);
 
-    // アノテーション切り替え
-    document.querySelectorAll('.annotation-toggle').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-            state.annotations[e.target.dataset.type] = e.target.checked;
+    // アノテーショントグル
+    document.querySelectorAll('.annotation-toggle').forEach(chk => {
+        chk.addEventListener('change', (e) => {
+            const type = e.target.dataset.type;
+            state.annotations[type] = e.target.checked;
             renderChart();
         });
     });
@@ -190,16 +198,26 @@ function initEventListeners() {
     document.getElementById('show-events')?.addEventListener('change', toggleEventDisplay);
     document.getElementById('show-attributes')?.addEventListener('change', toggleAttributeDisplay);
 
-    // ズームリセット
-    document.getElementById('zoom-reset-btn')?.addEventListener('click', resetZoom);
+    // キー操作（左右矢印で機番切り替えなどは未実装、ページネーション用）
+    // ...
 
     // URLコピー
     document.getElementById('copy-url-btn')?.addEventListener('click', copyURL);
 
-    // プリセット
+    // ズームリセット
+    document.getElementById('zoom-reset-btn')?.addEventListener('click', () => {
+        if (!mainChart) return;
+        mainChart.dispatchAction({
+            type: 'dataZoom',
+            start: 0,
+            end: 100
+        });
+    });
+
+    // プリセット保存・削除
     document.getElementById('save-preset-btn')?.addEventListener('click', savePreset);
     document.getElementById('delete-preset-btn')?.addEventListener('click', deletePreset);
-    document.getElementById('preset-select')?.addEventListener('change', loadPreset);
+    document.getElementById('preset-select')?.addEventListener('change', applyPreset);
 
     // ページネーション
     document.getElementById('prev-page')?.addEventListener('click', () => changePage(-1));
@@ -234,6 +252,62 @@ function initEventListeners() {
 
     // CSVダウンロード
     document.getElementById('download-csv-btn')?.addEventListener('click', downloadCSV);
+}
+
+function setupSeriesListeners(seriesId) {
+    // カテゴリー選択
+    document.getElementById(`category-select-${seriesId}`)?.addEventListener('change', (e) => {
+        const idx = seriesId - 1;
+        state.series[idx].category = e.target.value;
+        state.series[idx].characteristicId = ''; // リセット
+
+        updateCharacteristicOptions(seriesId);
+        updateURL();
+    });
+
+    // 特性値選択
+    document.getElementById(`characteristic-select-${seriesId}`)?.addEventListener('change', (e) => {
+        const idx = seriesId - 1;
+        state.series[idx].characteristicId = e.target.value;
+        if (state.machineNumber) {
+            loadCharacteristics();
+        }
+        updateURL();
+    });
+
+    // 集計方法選択
+    document.getElementById(`aggregation-method-${seriesId}`)?.addEventListener('change', (e) => {
+        const idx = seriesId - 1;
+        state.series[idx].aggregationMethod = e.target.value;
+        if (state.machineNumber && state.series[idx].characteristicId) {
+            loadCharacteristics();
+        }
+        updateURL();
+    });
+}
+
+function toggleSeries2(show) {
+    const s2 = document.getElementById('series-2-container');
+    const addBtn = document.getElementById('add-series-btn');
+    if (!s2) return;
+
+    // UI表示切替
+    s2.style.display = show ? 'flex' : 'none';
+    if (addBtn) addBtn.style.display = show ? 'none' : 'inline-block';
+
+    // 状態更新
+    state.series[1].visible = show;
+
+    if (show) {
+        // 表示されたとき、もし条件が設定済みならデータをロード
+        if (state.series[1].characteristicId && state.machineNumber) {
+            loadCharacteristics();
+        }
+    } else {
+        // 隠されたときは、データをクリアするか、単に表示から外す
+        // ここではレンダリング更新
+        renderChart();
+    }
 }
 
 // ===================================
@@ -274,8 +348,12 @@ async function loadData() {
         renderEventsTable();
 
         // カテゴリーと特性値が選択されていればグラフも表示
-        if (state.category && state.characteristicId) {
-            await loadCharacteristicsAndShowChart();
+        // シリーズ1またはシリーズ2が設定されていればロード
+        const hasSeries1 = state.series[0].category && state.series[0].characteristicId;
+        const hasSeries2 = state.series[1].visible && state.series[1].category && state.series[1].characteristicId;
+
+        if (hasSeries1 || hasSeries2) {
+            await loadCharacteristics();
         }
 
         // URLを更新
@@ -290,34 +368,22 @@ async function loadData() {
 }
 
 // 特性値読み込みとグラフ表示
-async function loadCharacteristicsAndShowChart() {
-    if (!state.machineNumber || !state.characteristicId) return;
 
-    showLoading(true);
-
-    try {
-        await loadCharacteristics();
-
-        // グラフ表示完了
-        state.chartDisplayed = true;
-        updateStepStatus();
-        toggleEmptyState(false);
-        updateChartTitle();
-
-    } catch (error) {
-        console.error('グラフ表示エラー:', error);
-    } finally {
-        showLoading(false);
-    }
-}
 
 // チャートタイトル更新
 function updateChartTitle() {
     const titleEl = document.getElementById('chart-title');
     if (!titleEl) return;
 
-    if (state.category && state.characteristicId) {
-        titleEl.textContent = `${state.category} / ${state.characteristicId}`;
+    const s1 = state.series[0];
+    const s2 = state.series[1];
+
+    if (s1.visible && s1.characteristicId) {
+        let text = `${s1.category} / ${s1.characteristicId}`;
+        if (s2.visible && s2.characteristicId) {
+            text += ` & ${s2.category} / ${s2.characteristicId}`;
+        }
+        titleEl.textContent = text;
     } else if (state.machineNumber) {
         titleEl.textContent = `${state.machineNumber}`;
     } else {
@@ -358,48 +424,94 @@ function toggleEmptyState(show) {
 async function loadCharacteristics() {
     if (!state.machineNumber) return;
 
-    const params = new URLSearchParams({
-        x_axis_type: state.xAxisType,
+    showLoading(true);
+
+    // 各系列のデータを並行取得
+    const promises = state.series.map(async (s, index) => {
+        // 表示かつ設定済みの場合のみ取得
+        if (!s.visible || !s.category || !s.characteristicId) {
+            s.data = [];
+            return;
+        }
+
+        const params = new URLSearchParams({
+            x_axis_type: state.xAxisType,
+            category: s.category,
+            characteristic_id: s.characteristicId,
+            // aggregation: s.aggregationMethod // APIが対応しているか確認必要だが、とりあえずパラメータに含める
+            // 現状のAPI定義には aggregation はないかも？仕様にはある
+            // もしAPIになければクライアント側で処理か、API更新必要
+            // history.pyを確認すると aggregation 引数はない。
+            // しかし現状の実装でも aggregation-method ドロップダウンはある。
+            // これまではパラメータとして送っていなかった（Step 214参照）。
+            // なので、ここではパラメータに含めない、あるいは無視される。
+            // 仕様では「集計方法を選択」とある。
+            // データがDaily/Monthlyの場合、すでに集計済み値が返る。
+            // APIがAggregationに対応していないなら、追加するか、一旦無視。
+            // ここでは無視して従来のパラメータのみ送る。
+        });
+
+        if (state.startDate) {
+            params.set('start_date', state.startDate);
+        }
+        if (state.endDate) {
+            params.set('end_date', state.endDate);
+        }
+
+        try {
+            const res = await fetch(`/history/api/characteristics/${encodeURIComponent(state.machineNumber)}?${params}`);
+            const data = await res.json();
+            s.data = data.values || [];
+        } catch (error) {
+            console.error(`系列${index + 1}読み込みエラー:`, error);
+            s.data = [];
+        }
     });
 
-    if (state.category) {
-        params.set('category', state.category);
-    }
-    if (state.characteristicId) {
-        params.set('characteristic_id', state.characteristicId);
-    }
-    if (state.startDate) {
-        params.set('start_date', state.startDate);
-    }
-    if (state.endDate) {
-        params.set('end_date', state.endDate);
-    }
-
     try {
-        const res = await fetch(`/history/api/characteristics/${encodeURIComponent(state.machineNumber)}?${params}`);
-        const data = await res.json();
-        state.characteristics = data.values || [];
+        await Promise.all(promises);
 
-        renderChart();
-        renderDetailTable();
+        // グラフ表示完了（データがある場合のみ）
+        const hasData = state.series.some(s => s.visible && s.data.length > 0);
+
+        if (hasData) {
+            state.chartDisplayed = true;
+            updateStepStatus();
+            toggleEmptyState(false);
+            updateChartTitle();
+            renderChart();
+            renderDetailTable();
+        } else {
+            // データがない場合（クリアされた場合など）
+            // 必要ならEmptyStateに戻すか、空のチャートを出す
+            // ここではChart.clear()がrenderChartで行われる
+            renderChart();
+        }
 
     } catch (error) {
         console.error('特性値読み込みエラー:', error);
+    } finally {
+        showLoading(false);
     }
 }
 
-async function updateCharacteristicOptions() {
-    const select = document.getElementById('characteristic-select');
+async function updateCharacteristicOptions(seriesId = 1) {
+    const select = document.getElementById(`characteristic-select-${seriesId}`);
     if (!select) return;
 
-    if (!state.category) {
+    const idx = seriesId - 1;
+    const category = state.series[idx].category;
+
+    if (!category) {
         select.innerHTML = '<option value="">カテゴリーを選択してください</option>';
         select.disabled = true;
         return;
     }
 
     try {
-        const res = await fetch(`/history/api/characteristic-ids/${encodeURIComponent(state.category)}`);
+        console.log(`Fetching characteristics for category: ${category}`);
+        const res = await fetch(`/history/api/characteristic-ids/${encodeURIComponent(category)}`);
+        if (!res.ok) throw new Error(`API Error: ${res.status}`);
         const data = await res.json();
 
         let options = '<option value="">選択してください</option>';
@@ -422,9 +534,11 @@ async function updateCharacteristicOptions() {
 
         select.innerHTML = options;
         select.disabled = false;
+        console.log(`Options updated for series ${seriesId}`);
 
     } catch (error) {
         console.error('特性値ID取得エラー:', error);
+        select.innerHTML = '<option value="">読み込みエラー</option>';
     }
 }
 
@@ -487,7 +601,8 @@ function renderEventsTable() {
 }
 
 function renderChart() {
-    if (!mainChart || !state.characteristics.length) {
+    const hasData = state.series.some(s => s.visible && s.data.length > 0);
+    if (!mainChart || !hasData) {
         mainChart?.clear();
         return;
     }
@@ -500,15 +615,99 @@ function renderChart() {
 }
 
 function renderLineChart() {
-    const data = state.characteristics;
+    // 表示対象の系列を取得
+    const visibleSeries = state.series.filter(s => s.visible && s.data.length > 0);
+    if (visibleSeries.length === 0) {
+        mainChart?.clear(); // renderChartでガードしてるが念のため
+        return;
+    }
 
-    // X軸データ
-    const xAxisData = state.xAxisType === 'usage'
-        ? data.map(d => d.usage_count)
-        : data.map(d => d.record_date);
+    // X軸データの統合（全系列の和集合）
+    const allXValues = new Set();
+    visibleSeries.forEach(s => {
+        s.data.forEach(d => {
+            if (state.xAxisType === 'usage') {
+                allXValues.add(d.usage_count);
+            } else {
+                allXValues.add(d.record_date);
+            }
+        });
+    });
 
-    // Y軸データ
-    const yAxisData = data.map(d => d.value_numeric);
+    // ソート
+    const xAxisData = Array.from(allXValues).sort((a, b) => {
+        if (state.xAxisType === 'usage') {
+            return Number(a) - Number(b);
+        } else {
+            return a.localeCompare(b);
+        }
+    });
+
+    // 各系列のデータを作成（X軸に合わせてマッピング）
+    const seriesList = visibleSeries.map((s, index) => {
+        // データマップ作成
+        const map = new Map();
+        s.data.forEach(d => {
+            const k = state.xAxisType === 'usage' ? d.usage_count : d.record_date;
+            map.set(k, d.value_numeric);
+        });
+
+        // X軸データに合わせて値を埋める
+        const data = xAxisData.map(x => map.get(x) !== undefined ? map.get(x) : null);
+
+        return {
+            name: `${s.category}/${s.characteristicId}`, // 凡例用
+            data: data,
+            yAxisIndex: index, // 0: 左, 1: 右
+            type: 'line',
+            connectNulls: true, // データが欠損していても線をつなぐ（お好みで。欠損目立たせるならfalse）
+            sConfig: s // 参照用
+        };
+    });
+
+    // Y軸構成
+    const yAxisConfig = [];
+
+    // Y軸1（左）
+    if (visibleSeries.length > 0) {
+        yAxisConfig.push({
+            gridIndex: 0,
+            type: 'value',
+            name: visibleSeries[0].characteristicId,
+            position: 'left',
+            axisLine: { show: true, lineStyle: { color: '#5470C6' } }, // EChartsデフォルト色に合わせるなど
+            axisLabel: { color: '#5470C6' }
+        });
+    }
+
+    // Y軸2（右）
+    if (visibleSeries.length > 1) {
+        yAxisConfig.push({
+            gridIndex: 0,
+            type: 'value',
+            name: visibleSeries[1].characteristicId,
+            position: 'right',
+            splitLine: { show: false }, // グリッド線は左軸のみにするとスッキリする
+            axisLine: { show: true, lineStyle: { color: '#91CC75' } },
+            axisLabel: { color: '#91CC75' }
+        });
+    }
+
+    // イベントY軸（最後に追加）
+    const eventYAxisIndex = yAxisConfig.length;
+    yAxisConfig.push({
+        gridIndex: 1,
+        type: 'category',
+        data: ['FW更新', '部品交換', 'メンテナンス', '不具合発生'], // eventCategories scope fix needed
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: true, lineStyle: { type: 'dashed' } },
+        axisLabel: {
+            interval: 0,
+            width: 90,
+            overflow: 'break'
+        }
+    });
 
     // イベント散布図データ作成
     // イベント散布図データ作成
@@ -538,25 +737,66 @@ function renderLineChart() {
         }
     });
 
+    // シリーズ構成
+    const chartSeries = [];
+    seriesList.forEach((s, i) => {
+        chartSeries.push({
+            name: s.name,
+            type: 'line',
+            xAxisIndex: 0,
+            yAxisIndex: s.yAxisIndex,
+            data: s.data,
+            showSymbol: s.data.length < 50, // データ点が多い時はシンボル隠す
+            // 色指定（EChartsデフォルトパレットに従うなら指定なしでOK）
+        });
+    });
+
+    // イベント散布図追加
+    chartSeries.push({
+        name: 'イベント',
+        type: 'scatter',
+        xAxisIndex: 1,
+        yAxisIndex: eventYAxisIndex, // 動的に決定したインデックス
+        symbolSize: 10,
+        data: eventSeriesData
+    });
+
     const option = {
         tooltip: {
-            trigger: 'item',
+            trigger: 'axis', // 複数系列ならaxisが見やすい
+            axisPointer: { type: 'cross' },
             formatter: (params) => {
-                if (params.seriesIndex === 0) { // メインチャート（折れ線）
-                    const p = params;
-                    if (state.xAxisType === 'usage') {
-                        return `使用回数: ${p.value[0]?.toLocaleString()}<br/>値: ${p.value[1]}`;
-                    }
-                    return `${p.name}<br/>値: ${p.value}`;
-                } else if (params.seriesIndex === 1) { // イベントチャート
-                    const event = params.data.eventInfo;
-                    return `
-                        <strong>${event.event_type}</strong><br/>
-                        日付: ${event.event_date}<br/>
-                        ${event.description || ''}
-                    `;
+                // paramsは配列（axis triggerの場合）
+                let html = '';
+                if (params.length > 0) {
+                    html += `${params[0].axisValue}<br/>`; // X軸の値（日付など）
                 }
+
+                params.forEach(p => {
+                    if (p.seriesType === 'line') {
+                        // 値がnullでない場合のみ表示
+                        if (p.value != null) { // connectNullsしててもnullは入ってる
+                            html += `${p.marker} ${p.seriesName}: ${p.value}<br/>`;
+                        }
+                    } else if (p.seriesType === 'scatter') {
+                        // axis triggerだと散布図も拾うか？ 拾わない場合が多い（xAxisIndexが違うため）
+                        // しかしxAxisIndex: [0, 1]でリンクしてる場合拾うかも
+                        if (p.data && p.data.eventInfo) {
+                            const event = p.data.eventInfo;
+                            html += `
+                                ${p.marker} <strong>${event.event_type}</strong><br/>
+                                日付: ${event.event_date}<br/>
+                                ${event.description || ''}
+                            `;
+                        }
+                    }
+                });
+                return html;
             }
+        },
+        legend: {
+            show: true,
+            data: seriesList.map(s => s.name)
         },
         axisPointer: {
             link: { xAxisIndex: 'all' },
@@ -564,54 +804,36 @@ function renderLineChart() {
         },
         grid: [
             { // 上段：メインチャート
-                left: '100', right: '4%', height: '50%', top: '8%'
+                left: '100', right: '70', height: '45%', top: '10%' // 右マージンを広げてラベル切れ防止
             },
             { // 下段：イベントタイムライン
-                left: '100', right: '4%', top: '66%', height: '14%'
+                left: '100', right: '70', top: '65%', height: '12%' // スライダーとの重なりを避けるため位置調整
             }
         ],
         xAxis: [
             { // メインX軸
                 gridIndex: 0,
-                type: state.xAxisType === 'usage' ? 'value' : 'category',
-                data: state.xAxisType === 'usage' ? undefined : xAxisData,
-                axisLabel: { show: false }, // ラベル非表示
+                type: 'category', // 統合されたX軸データを使用
+                data: xAxisData,
+                axisLabel: { show: false },
                 axisTick: { show: false }
             },
             { // イベントX軸
                 gridIndex: 1,
-                type: state.xAxisType === 'usage' ? 'value' : 'category',
-                data: state.xAxisType === 'usage' ? undefined : xAxisData,
+                type: 'category',
+                data: xAxisData, // 同じX軸スケール
                 name: state.xAxisType === 'usage' ? '使用回数' : '日付',
                 axisLabel: {
-                    formatter: state.xAxisType === 'usage' ? (v) => v.toLocaleString() : undefined,
-                    margin: 14
+                    formatter: state.xAxisType === 'usage' ? (v) => Number(v).toLocaleString() : undefined,
+                    margin: 15 // ラベルと軸の間隔を調整
                 },
                 position: 'bottom',
-                min: state.xAxisType === 'usage' ? (v) => v.min : undefined,
-                max: state.xAxisType === 'usage' ? (v) => v.max : undefined
+                // min/max for value axis, but here it is category
             }
         ],
-        yAxis: [
-            { // メインY軸
-                gridIndex: 0,
-                type: 'value',
-                name: state.characteristicId || '値',
-            },
-            { // イベントY軸（カテゴリ）
-                gridIndex: 1,
-                type: 'category',
-                data: eventCategories,
-                axisLine: { show: false },
-                axisTick: { show: false },
-                splitLine: { show: true, lineStyle: { type: 'dashed' } },
-                axisLabel: {
-                    interval: 0, // 全て表示
-                    width: 90,
-                    overflow: 'break'
-                }
-            }
-        ],
+        yAxis: yAxisConfig, // 動的に構築したY軸設定
+        // ... (visualMapはLineChartでは不要、ColorChart用だがGlobal設定にあると邪魔かも？)
+        // LineChartではvisualMap除去
         dataZoom: [
             {
                 type: 'inside',
@@ -628,24 +850,7 @@ function renderLineChart() {
                 height: 30
             },
         ],
-        series: [{
-            type: 'line',
-            data: state.xAxisType === 'usage'
-                ? data.map(d => [d.usage_count, d.value_numeric])
-                : yAxisData,
-            smooth: true,
-            itemStyle: {
-                color: '#4f46e5',
-            },
-        },
-        { // イベント：散布図
-            name: 'イベント',
-            type: 'scatter',
-            xAxisIndex: 1,
-            yAxisIndex: 1,
-            symbolSize: 10,
-            data: eventSeriesData
-        }],
+        series: chartSeries
     };
 
     mainChart.setOption(option, true);
@@ -1116,8 +1321,22 @@ function updateURL() {
     const params = new URLSearchParams();
 
     if (state.machineNumber) params.set('machine', state.machineNumber);
-    if (state.category) params.set('category', state.category);
-    if (state.characteristicId) params.set('char', state.characteristicId);
+
+    // 系列1
+    const s1 = state.series[0];
+    if (s1.category) params.set('s1_cat', s1.category);
+    if (s1.characteristicId) params.set('s1_char', s1.characteristicId);
+    if (s1.aggregationMethod) params.set('s1_agg', s1.aggregationMethod);
+
+    // 系列2
+    const s2 = state.series[1];
+    if (s2.visible) {
+        params.set('s2_vis', '1');
+        if (s2.category) params.set('s2_cat', s2.category);
+        if (s2.characteristicId) params.set('s2_char', s2.characteristicId);
+        if (s2.aggregationMethod) params.set('s2_agg', s2.aggregationMethod);
+    }
+
     if (state.chartType !== 'line') params.set('chart', state.chartType);
     if (state.xAxisType !== 'monthly') params.set('xaxis', state.xAxisType);
     if (state.startDate) params.set('start', state.startDate);
@@ -1127,31 +1346,83 @@ function updateURL() {
     history.replaceState(null, '', newURL);
 }
 
-function loadFromURL() {
+async function loadFromURL() {
+    console.log('Loading from URL...');
     const params = new URLSearchParams(window.location.search);
 
     const machine = params.get('machine');
     if (machine) {
-        document.getElementById('machine-number').value = machine;
+        const el = document.getElementById('machine-number');
+        if (el) el.value = machine;
         state.machineNumber = machine;
     }
 
-    const category = params.get('category');
-    if (category) {
-        document.getElementById('category-select').value = category;
-        state.category = category;
-        updateCharacteristicOptions().then(() => {
-            const char = params.get('char');
-            if (char) {
-                document.getElementById('characteristic-select').value = char;
-                state.characteristicId = char;
+    try {
+        // 系列1読み込み
+        const s1Cat = params.get('s1_cat') || params.get('category'); // 旧paramもサポート
+        const s1Char = params.get('s1_char') || params.get('char');
+        const s1Agg = params.get('s1_agg');
+
+        console.log('Series 1 Params:', { s1Cat, s1Char, s1Agg });
+
+        if (s1Cat) {
+            const el = document.getElementById('category-select-1');
+            if (el) el.value = s1Cat;
+            state.series[0].category = s1Cat;
+
+            await updateCharacteristicOptions(1);
+
+            if (s1Char) {
+                const elChar = document.getElementById('characteristic-select-1');
+                if (elChar) elChar.value = s1Char;
+                state.series[0].characteristicId = s1Char;
             }
-        });
+            if (s1Agg) {
+                const elAgg = document.getElementById('aggregation-method-1');
+                if (elAgg) elAgg.value = s1Agg;
+                state.series[0].aggregationMethod = s1Agg;
+            }
+        }
+
+        // 系列2読み込み
+        const s2Vis = params.get('s2_vis');
+        console.log('Series 2 Visibility:', s2Vis);
+
+        if (s2Vis === '1') {
+            toggleSeries2(true);
+            const s2Cat = params.get('s2_cat');
+            const s2Char = params.get('s2_char');
+            const s2Agg = params.get('s2_agg');
+
+            console.log('Series 2 Params:', { s2Cat, s2Char, s2Agg });
+
+            if (s2Cat) {
+                const el = document.getElementById('category-select-2');
+                if (el) el.value = s2Cat;
+                state.series[1].category = s2Cat;
+
+                await updateCharacteristicOptions(2);
+
+                if (s2Char) {
+                    const elChar = document.getElementById('characteristic-select-2');
+                    if (elChar) elChar.value = s2Char;
+                    state.series[1].characteristicId = s2Char;
+                }
+                if (s2Agg) {
+                    const elAgg = document.getElementById('aggregation-method-2');
+                    if (elAgg) elAgg.value = s2Agg;
+                    state.series[1].aggregationMethod = s2Agg;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error loading URL params:', e);
     }
 
     const chartType = params.get('chart');
     if (chartType) {
-        document.querySelector(`input[name="chart-type"][value="${chartType}"]`).checked = true;
+        const el = document.querySelector(`input[name="chart-type"][value="${chartType}"]`);
+        if (el) el.checked = true;
         state.chartType = chartType;
     }
 
@@ -1176,6 +1447,7 @@ function loadFromURL() {
 
     // 機番が指定されていたらデータを読み込む
     if (machine) {
+        console.log('Auto-loading data for machine:', machine);
         loadData();
     }
 }
@@ -1287,7 +1559,7 @@ function savePreset() {
     alert('プリセットを保存しました');
 }
 
-function loadPreset() {
+async function applyPreset() {
     const name = document.getElementById('preset-select').value;
     if (!name) return;
 
@@ -1295,19 +1567,25 @@ function loadPreset() {
     const preset = presets[name];
     if (!preset) return;
 
-    // 状態を復元
-    state.category = preset.category || '';
-    state.characteristicId = preset.characteristicId || '';
+    // 状態を復元（系列1のみ対応）
+    state.series[0].category = preset.category || '';
+    state.series[0].characteristicId = preset.characteristicId || '';
     state.chartType = preset.chartType || 'line';
     state.xAxisType = preset.xAxisType || 'monthly';
     state.annotations = preset.annotations || state.annotations;
 
     // UIを更新
-    document.getElementById('category-select').value = state.category;
-    updateCharacteristicOptions().then(() => {
-        document.getElementById('characteristic-select').value = state.characteristicId;
-    });
-    document.querySelector(`input[name="chart-type"][value="${state.chartType}"]`).checked = true;
+    const catEl = document.getElementById('category-select-1');
+    if (catEl) catEl.value = state.series[0].category;
+
+    await updateCharacteristicOptions(1);
+
+    const charEl = document.getElementById('characteristic-select-1');
+    if (charEl) charEl.value = state.series[0].characteristicId;
+
+    const chartEl = document.querySelector(`input[name="chart-type"][value="${state.chartType}"]`);
+    if (chartEl) chartEl.checked = true;
+
     document.getElementById('x-axis-type').value = state.xAxisType;
 
     Object.entries(state.annotations).forEach(([type, checked]) => {
@@ -1317,9 +1595,10 @@ function loadPreset() {
 
     // データを再読み込み
     if (state.machineNumber) {
-        loadCharacteristics();
+        loadData();
     }
 }
+
 
 function deletePreset() {
     const name = document.getElementById('preset-select').value;
