@@ -1120,6 +1120,8 @@ function updateURL() {
     if (state.characteristicId) params.set('char', state.characteristicId);
     if (state.chartType !== 'line') params.set('chart', state.chartType);
     if (state.xAxisType !== 'monthly') params.set('xaxis', state.xAxisType);
+    if (state.startDate) params.set('start', state.startDate);
+    if (state.endDate) params.set('end', state.endDate);
 
     const newURL = `${window.location.pathname}?${params.toString()}`;
     history.replaceState(null, '', newURL);
@@ -1157,6 +1159,19 @@ function loadFromURL() {
     if (xAxisType) {
         document.getElementById('x-axis-type').value = xAxisType;
         state.xAxisType = xAxisType;
+        toggleDateInputs(xAxisType === 'daily');
+    }
+
+    const start = params.get('start');
+    if (start) {
+        document.getElementById('start-date').value = start;
+        state.startDate = start;
+    }
+
+    const end = params.get('end');
+    if (end) {
+        document.getElementById('end-date').value = end;
+        state.endDate = end;
     }
 
     // 機番が指定されていたらデータを読み込む
