@@ -15,6 +15,11 @@ const state = {
     xAxisType: 'monthly',
     category: '',
     characteristicId: '',
+    aggregationMethod: 'latest',
+    startDate: '',
+    endDate: '',
+    viewStartDate: '', // 現在表示中の範囲（開始）
+    viewEndDate: '',   // 現在表示中の範囲（終了）
     annotations: {
         'FW更新': true,
         '部品交換': true,
@@ -26,6 +31,9 @@ const state = {
     pageSize: 20,
     sortField: 'date',
     sortOrder: 'asc',
+    // UI状態
+    dataLoaded: false,
+    chartDisplayed: false,
 };
 
 // EChartsインスタンス
@@ -53,6 +61,44 @@ function initCharts() {
     window.addEventListener('resize', () => {
         mainChart?.resize();
     });
+
+    // ズームイベント監視（表示範囲の追跡）
+    mainChart?.on('dataZoom', (params) => {
+        if (state.xAxisType !== 'monthly' || !state.characteristics.length) return;
+
+        let startPercent, endPercent;
+
+        // イベントパラメータの正規化
+        if (params.batch && params.batch[0]) {
+            startPercent = params.batch[0].start;
+            endPercent = params.batch[0].end;
+        } else {
+            startPercent = params.start;
+            endPercent = params.end;
+        }
+
+        if (startPercent == null || endPercent == null) return;
+
+        const axis = mainChart.getOption().xAxis[0];
+        const len = axis.data ? axis.data.length : state.characteristics.length;
+
+        const startIdx = Math.floor(len * startPercent / 100);
+        const endIdx = Math.ceil(len * endPercent / 100) - 1;
+
+        // インデックス範囲チェック
+        const safeStartIdx = Math.max(0, Math.min(startIdx, len - 1));
+        const safeEndIdx = Math.max(0, Math.min(endIdx, len - 1));
+
+        // 現在表示中の日付を保存
+        const data = state.characteristics;
+        const d1 = data[safeStartIdx]?.record_date;
+        const d2 = data[safeEndIdx]?.record_date;
+
+        if (d1 && d2) {
+            state.viewStartDate = d1 < d2 ? d1 : d2;
+            state.viewEndDate = d1 < d2 ? d2 : d1;
+        }
+    });
 }
 
 function initEventListeners() {
@@ -68,11 +114,19 @@ function initEventListeners() {
         await updateCharacteristicOptions();
     });
 
-    // 特性値ID変更
+    // 特性値ID変更（自動更新）
     document.getElementById('characteristic-select')?.addEventListener('change', (e) => {
         state.characteristicId = e.target.value;
-        if (state.machineNumber) {
-            loadCharacteristics();
+        if (state.machineNumber && state.characteristicId) {
+            loadCharacteristicsAndShowChart();
+        }
+    });
+
+    // 集計方法変更（自動更新）
+    document.getElementById('aggregation-method')?.addEventListener('change', (e) => {
+        state.aggregationMethod = e.target.value;
+        if (state.machineNumber && state.characteristicId) {
+            loadCharacteristicsAndShowChart();
         }
     });
 
@@ -86,11 +140,43 @@ function initEventListeners() {
 
     // X軸タイプ変更
     document.getElementById('x-axis-type')?.addEventListener('change', (e) => {
-        state.xAxisType = e.target.value;
+        const newType = e.target.value;
+        const oldType = state.xAxisType;
+        state.xAxisType = newType;
+
+        // トグル表示
+        toggleDateInputs(newType === 'daily');
+
+        // 月次→日次の場合、表示範囲を引き継ぐ（ドリルダウン）
+        if (oldType === 'monthly' && newType === 'daily' && state.viewStartDate && state.viewEndDate) {
+            state.startDate = state.viewStartDate;
+            state.endDate = state.viewEndDate;
+            // 入力欄にセット
+            document.getElementById('start-date').value = state.startDate;
+            document.getElementById('end-date').value = state.endDate;
+        } else if (newType !== 'daily') {
+            // 他のモードへ切り替えるときは期間リセット（必要なら）
+            state.startDate = '';
+            state.endDate = '';
+            document.getElementById('start-date').value = '';
+            document.getElementById('end-date').value = '';
+        }
+
         if (state.machineNumber) {
             loadCharacteristics();
         }
     });
+
+    // 日付範囲変更
+    const onDateChange = () => {
+        state.startDate = document.getElementById('start-date').value;
+        state.endDate = document.getElementById('end-date').value;
+        if (state.machineNumber) {
+            loadCharacteristics();
+        }
+    };
+    document.getElementById('start-date')?.addEventListener('change', onDateChange);
+    document.getElementById('end-date')?.addEventListener('change', onDateChange);
 
     // アノテーション切り替え
     document.querySelectorAll('.annotation-toggle').forEach(checkbox => {
@@ -177,14 +263,20 @@ async function loadData() {
         const eventsData = await eventsRes.json();
         state.events = eventsData.events || [];
 
+        // データ読み込み完了
+        state.dataLoaded = true;
+        updateStepStatus();
+
         // 機番属性を表示
         renderMachineInfo();
 
         // イベント一覧を表示
         renderEventsTable();
 
-        // 特性値を読み込み
-        await loadCharacteristics();
+        // カテゴリーと特性値が選択されていればグラフも表示
+        if (state.category && state.characteristicId) {
+            await loadCharacteristicsAndShowChart();
+        }
 
         // URLを更新
         updateURL();
@@ -194,6 +286,72 @@ async function loadData() {
         alert('データの読み込みに失敗しました');
     } finally {
         showLoading(false);
+    }
+}
+
+// 特性値読み込みとグラフ表示
+async function loadCharacteristicsAndShowChart() {
+    if (!state.machineNumber || !state.characteristicId) return;
+
+    showLoading(true);
+
+    try {
+        await loadCharacteristics();
+
+        // グラフ表示完了
+        state.chartDisplayed = true;
+        updateStepStatus();
+        toggleEmptyState(false);
+        updateChartTitle();
+
+    } catch (error) {
+        console.error('グラフ表示エラー:', error);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// チャートタイトル更新
+function updateChartTitle() {
+    const titleEl = document.getElementById('chart-title');
+    if (!titleEl) return;
+
+    if (state.category && state.characteristicId) {
+        titleEl.textContent = `${state.category} / ${state.characteristicId}`;
+    } else if (state.machineNumber) {
+        titleEl.textContent = `${state.machineNumber}`;
+    } else {
+        titleEl.textContent = '機番データ';
+    }
+}
+
+// ステップ状態更新
+function updateStepStatus() {
+    const step1 = document.querySelector('[data-step="1"]');
+    const step2 = document.querySelector('[data-step="2"]');
+    const step3 = document.querySelector('[data-step="3"]');
+
+    if (step1 && state.dataLoaded) {
+        step1.classList.add('completed');
+    }
+    if (step2 && state.chartDisplayed) {
+        step2.classList.add('completed');
+    }
+}
+
+// 空状態の表示切替
+function toggleEmptyState(show) {
+    const emptyState = document.getElementById('empty-state');
+    const mainChartDom = document.getElementById('main-chart');
+
+    if (emptyState) {
+        emptyState.style.display = show ? 'flex' : 'none';
+    }
+    if (mainChartDom) {
+        mainChartDom.style.display = show ? 'none' : 'block';
+        if (!show && mainChart) {
+            setTimeout(() => mainChart.resize(), 100);
+        }
     }
 }
 
@@ -209,6 +367,12 @@ async function loadCharacteristics() {
     }
     if (state.characteristicId) {
         params.set('characteristic_id', state.characteristicId);
+    }
+    if (state.startDate) {
+        params.set('start_date', state.startDate);
+    }
+    if (state.endDate) {
+        params.set('end_date', state.endDate);
     }
 
     try {
@@ -274,10 +438,8 @@ function renderMachineInfo() {
 
     if (!container || !content || !state.machineInfo) return;
 
-    const showAttributes = document.getElementById('show-attributes')?.checked;
-    container.style.display = showAttributes ? 'block' : 'none';
-
-    if (!showAttributes) return;
+    // 新レイアウトでは常に表示
+    container.style.display = 'block';
 
     const info = state.machineInfo;
     content.innerHTML = `
@@ -286,19 +448,15 @@ function renderMachineInfo() {
             <span class="info-value">${info.machine_number}</span>
         </div>
         <div class="info-item">
-            <span class="info-label">機種シリーズ</span>
-            <span class="info-value">${info.model_series}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">機種番号</span>
-            <span class="info-value">${info.model_number}</span>
+            <span class="info-label">機種</span>
+            <span class="info-value">${info.model_series} / ${info.model_number}</span>
         </div>
         <div class="info-item">
             <span class="info-label">製造月</span>
             <span class="info-value">${info.manufacture_month}</span>
         </div>
         <div class="info-item">
-            <span class="info-label">稼働開始月</span>
+            <span class="info-label">稼働開始</span>
             <span class="info-value">${info.operation_start_month || '-'}</span>
         </div>
         <div class="info-item">
@@ -313,25 +471,17 @@ function renderMachineInfo() {
 }
 
 function renderEventsTable() {
-    const container = document.getElementById('events-table-container');
     const tbody = document.getElementById('events-table-body');
 
-    if (!container || !tbody) return;
+    if (!tbody) return;
 
-    const showEvents = document.getElementById('show-events')?.checked;
-    container.style.display = showEvents ? 'block' : 'none';
-
-    if (!showEvents) return;
-
+    // 新レイアウトではイベント情報は常に表示（コンパクト版）
     tbody.innerHTML = state.events.map(event => `
         <tr>
             <td>${event.event_date}</td>
             <td>${event.event_type}</td>
             <td>${event.event_code || '-'}</td>
-            <td>${event.event_category || '-'}</td>
             <td>${event.description || '-'}</td>
-            <td>${event.fw_version || '-'}</td>
-            <td>${event.usage_count?.toLocaleString() || '-'}</td>
         </tr>
     `).join('');
 }
@@ -360,59 +510,111 @@ function renderLineChart() {
     // Y軸データ
     const yAxisData = data.map(d => d.value_numeric);
 
-    // アノテーションライン（イベント）
-    const markLines = [];
+    // イベント散布図データ作成
+    const eventSeriesData = [];
+    const eventCategories = ['FW更新', '部品交換', 'メンテナンス', '不具合発生'];
+
     if (state.xAxisType !== 'usage') {
         state.events.forEach(event => {
             if (state.annotations[event.event_type]) {
-                markLines.push({
-                    xAxis: event.event_date,
-                    label: {
-                        formatter: event.event_type,
-                        position: 'end',
-                    },
-                    lineStyle: {
-                        color: getEventColor(event.event_type),
-                        type: 'dashed',
-                    },
-                });
+                const yIndex = eventCategories.indexOf(event.event_type);
+                if (yIndex !== -1) {
+                    eventSeriesData.push({
+                        value: [event.event_date, event.event_type], // [x, y]
+                        itemStyle: { color: getEventColor(event.event_type) },
+                        eventInfo: event // ツールチップ用
+                    });
+                }
             }
         });
     }
 
     const option = {
         tooltip: {
-            trigger: 'axis',
+            trigger: 'item',
             formatter: (params) => {
-                const p = params[0];
-                if (state.xAxisType === 'usage') {
-                    return `使用回数: ${p.axisValue?.toLocaleString()}<br/>値: ${p.value}`;
+                if (params.seriesIndex === 0) { // メインチャート（折れ線）
+                    const p = params;
+                    if (state.xAxisType === 'usage') {
+                        return `使用回数: ${p.value[0]?.toLocaleString()}<br/>値: ${p.value[1]}`;
+                    }
+                    return `${p.name}<br/>値: ${p.value}`;
+                } else if (params.seriesIndex === 1) { // イベントチャート
+                    const event = params.data.eventInfo;
+                    return `
+                        <strong>${event.event_type}</strong><br/>
+                        日付: ${event.event_date}<br/>
+                        ${event.description || ''}
+                    `;
                 }
-                return `${p.axisValue}<br/>値: ${p.value}`;
+            }
+        },
+        axisPointer: {
+            link: { xAxisIndex: 'all' },
+            label: { backgroundColor: '#777' }
+        },
+        grid: [
+            { // 上段：メインチャート
+                left: '100', right: '4%', height: '50%', top: '8%'
             },
-        },
-        xAxis: {
-            type: state.xAxisType === 'usage' ? 'value' : 'category',
-            data: state.xAxisType === 'usage' ? undefined : xAxisData,
-            name: state.xAxisType === 'usage' ? '使用回数' : '日付',
-            axisLabel: {
-                formatter: state.xAxisType === 'usage' ? (v) => v.toLocaleString() : undefined,
+            { // 下段：イベントタイムライン
+                left: '100', right: '4%', top: '66%', height: '14%'
+            }
+        ],
+        xAxis: [
+            { // メインX軸
+                gridIndex: 0,
+                type: state.xAxisType === 'usage' ? 'value' : 'category',
+                data: state.xAxisType === 'usage' ? undefined : xAxisData,
+                axisLabel: { show: false }, // ラベル非表示
+                axisTick: { show: false }
             },
-        },
-        yAxis: {
-            type: 'value',
-            name: state.characteristicId || '値',
-        },
+            { // イベントX軸
+                gridIndex: 1,
+                type: state.xAxisType === 'usage' ? 'value' : 'category',
+                data: state.xAxisType === 'usage' ? undefined : xAxisData,
+                name: state.xAxisType === 'usage' ? '使用回数' : '日付',
+                axisLabel: {
+                    formatter: state.xAxisType === 'usage' ? (v) => v.toLocaleString() : undefined,
+                    margin: 14
+                },
+                position: 'bottom'
+            }
+        ],
+        yAxis: [
+            { // メインY軸
+                gridIndex: 0,
+                type: 'value',
+                name: state.characteristicId || '値',
+            },
+            { // イベントY軸（カテゴリ）
+                gridIndex: 1,
+                type: 'category',
+                data: eventCategories,
+                axisLine: { show: false },
+                axisTick: { show: false },
+                splitLine: { show: true, lineStyle: { type: 'dashed' } },
+                axisLabel: {
+                    interval: 0, // 全て表示
+                    width: 90,
+                    overflow: 'break'
+                }
+            }
+        ],
         dataZoom: [
             {
                 type: 'inside',
+                xAxisIndex: [0, 1],
                 start: 0,
                 end: 100,
             },
             {
                 type: 'slider',
+                xAxisIndex: [0, 1],
                 start: 0,
                 end: 100,
+                bottom: 10,
+                height: 30
             },
         ],
         series: [{
@@ -424,10 +626,14 @@ function renderLineChart() {
             itemStyle: {
                 color: '#4f46e5',
             },
-            markLine: {
-                silent: true,
-                data: markLines,
-            },
+        },
+        { // イベント：散布図
+            name: 'イベント',
+            type: 'scatter',
+            xAxisIndex: 1,
+            yAxisIndex: 1,
+            symbolSize: 10,
+            data: eventSeriesData
         }],
     };
 
@@ -441,6 +647,25 @@ function renderColorChart() {
     const xAxisData = state.xAxisType === 'usage'
         ? data.map(d => d.usage_count)
         : data.map(d => d.record_date);
+
+    // イベント散布図データ作成
+    const eventSeriesData = [];
+    const eventCategories = ['FW更新', '部品交換', 'メンテナンス', '不具合発生'];
+
+    if (state.xAxisType !== 'usage') {
+        state.events.forEach(event => {
+            if (state.annotations[event.event_type]) {
+                const yIndex = eventCategories.indexOf(event.event_type);
+                if (yIndex !== -1) {
+                    eventSeriesData.push({
+                        value: [event.event_date, event.event_type], // [x, y]
+                        itemStyle: { color: getEventColor(event.event_type) },
+                        eventInfo: event // ツールチップ用
+                    });
+                }
+            }
+        });
+    }
 
     // 質的変数がある場合
     const hasQualitative = data.some(d => d.value_text);
@@ -464,57 +689,72 @@ function renderColorChart() {
         };
         const defaultColors = ['#10b981', '#f59e0b', '#ef4444', '#6b7280'];
 
-        // イベントのマークライン
-        const markLines = [];
-        if (state.xAxisType !== 'usage') {
-            state.events.forEach(event => {
-                if (state.annotations[event.event_type]) {
-                    markLines.push({
-                        xAxis: event.event_date,
-                        label: {
-                            formatter: event.event_type,
-                            position: 'end',
-                            fontSize: 10,
-                        },
-                        lineStyle: {
-                            color: getEventColor(event.event_type),
-                            type: 'dashed',
-                            width: 2,
-                        },
-                    });
-                }
-            });
-        }
-
         const option = {
             tooltip: {
-                trigger: 'axis',
+                trigger: 'item',
                 formatter: (params) => {
-                    if (params.length > 0) {
-                        const p = params[0];
-                        return `${p.axisValue}<br/>状態: ${p.data.value}`;
+                    if (params.seriesIndex === 0) { // メイン（ヒートマップ）
+                        const p = params;
+                        return `${p.name}<br/>状態: ${p.value[2]}`;
+                    } else if (params.seriesIndex === 1) { // イベント
+                        const event = params.data.eventInfo;
+                        return `
+                            <strong>${event.event_type}</strong><br/>
+                            日付: ${event.event_date}<br/>
+                            ${event.description || ''}
+                        `;
                     }
-                    return '';
                 },
             },
-            grid: {
-                left: '3%',
-                right: '4%',
-                bottom: '15%',
-                top: '10%',
-                containLabel: true,
-            },
-            xAxis: {
-                type: 'category',
-                data: xAxisData,
-                axisLabel: {
-                    rotate: 45,
+            grid: [
+                { // 上段：メインチャート
+                    left: '100', right: '4%', height: '50%', top: '8%'
                 },
-            },
-            yAxis: {
-                type: 'category',
-                data: [state.characteristicId || '状態'],
-            },
+                { // 下段：イベントタイムライン
+                    left: '100', right: '4%', top: '66%', height: '14%'
+                }
+            ],
+            xAxis: [
+                { // メインX軸
+                    gridIndex: 0,
+                    type: 'category',
+                    data: xAxisData,
+                    axisLabel: { show: false },
+                    axisTick: { show: false }
+                },
+                { // イベントX軸
+                    gridIndex: 1,
+                    type: 'category',
+                    data: xAxisData,
+                    position: 'bottom',
+                    axisLabel: { margin: 14 }
+                }
+            ],
+            yAxis: [
+                { // メインY軸
+                    gridIndex: 0,
+                    type: 'value',
+                    name: state.characteristicId || '状態',
+                    min: 0,
+                    max: 1,
+                    axisLabel: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false }
+                },
+                { // イベントY軸（カテゴリ）
+                    gridIndex: 1,
+                    type: 'category',
+                    data: eventCategories,
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { show: true, lineStyle: { type: 'dashed' } },
+                    axisLabel: {
+                        interval: 0,
+                        width: 90,
+                        overflow: 'break'
+                    }
+                }
+            ],
             visualMap: {
                 show: true,
                 type: 'piecewise',
@@ -523,29 +763,58 @@ function renderColorChart() {
                     color: values.map((v, i) => colorMap[v] || defaultColors[i % defaultColors.length]),
                 },
                 orient: 'horizontal',
-                bottom: 0,
+                right: 10,
+                top: 0,
+                dimension: 2
             },
+            dataZoom: [
+                {
+                    type: 'inside',
+                    xAxisIndex: [0, 1],
+                    start: 0,
+                    end: 100,
+                },
+                {
+                    type: 'slider',
+                    xAxisIndex: [0, 1],
+                    start: 0,
+                    end: 100,
+                    bottom: 10,
+                    height: 30
+                },
+            ],
             series: [{
-                type: 'heatmap',
+                type: 'bar',
+                xAxisIndex: 0,
+                yAxisIndex: 0,
+                barCategoryGap: '0%',
                 data: data.map((d, i) => ({
-                    value: d.value_text,
-                    itemStyle: {
-                        color: colorMap[d.value_text] || defaultColors[values.indexOf(d.value_text) % defaultColors.length],
-                    },
-                })).map((item, i) => [i, 0, item.value]),
+                    value: [i, 1, d.value_text], // [x, y, value]
+                })),
                 label: {
-                    show: data.length <= 30,
-                    formatter: (p) => p.value[2],
-                    fontSize: 10,
+                    show: true,
+                    position: 'inside', // ラベルを中央に
+                    formatter: (p) => {
+                        // スペースがあれば表示、なければ非表示などのロジックを入れることも可能
+                        // ここでは単純に値を表示
+                        return p.value[2];
+                    },
+                    fontSize: 12,
+                    color: '#fff', // 文字色を白に（背景色によるが）
+                    textBorderColor: '#000',
+                    textBorderWidth: 2
                 },
                 itemStyle: {
-                    borderColor: '#fff',
-                    borderWidth: 1,
+                    borderWidth: 0
                 },
-                markLine: markLines.length > 0 ? {
-                    silent: true,
-                    data: markLines,
-                } : undefined,
+            },
+            { // イベント：散布図
+                name: 'イベント',
+                type: 'scatter',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                symbolSize: 10,
+                data: eventSeriesData
             }],
         };
 
@@ -556,57 +825,67 @@ function renderColorChart() {
         const minVal = Math.min(...values);
         const maxVal = Math.max(...values);
 
-        // イベントのマークライン
-        const markLines = [];
-        if (state.xAxisType !== 'usage') {
-            state.events.forEach(event => {
-                if (state.annotations[event.event_type]) {
-                    markLines.push({
-                        xAxis: event.event_date,
-                        label: {
-                            formatter: event.event_type,
-                            position: 'end',
-                            fontSize: 10,
-                        },
-                        lineStyle: {
-                            color: getEventColor(event.event_type),
-                            type: 'dashed',
-                            width: 2,
-                        },
-                    });
-                }
-            });
-        }
-
         const option = {
             tooltip: {
-                trigger: 'axis',
+                trigger: 'item',
                 formatter: (params) => {
-                    if (params.length > 0) {
-                        const p = params[0];
-                        return `${p.axisValue}<br/>値: ${p.value}`;
+                    if (params.seriesIndex === 0) { // メイン（棒グラフ）
+                        const p = params;
+                        return `${p.name}<br/>値: ${p.value}`;
+                    } else if (params.seriesIndex === 1) { // イベント
+                        const event = params.data.eventInfo;
+                        return `
+                            <strong>${event.event_type}</strong><br/>
+                            日付: ${event.event_date}<br/>
+                            ${event.description || ''}
+                        `;
                     }
-                    return '';
                 },
             },
-            grid: {
-                left: '3%',
-                right: '4%',
-                bottom: '15%',
-                top: '10%',
-                containLabel: true,
-            },
-            xAxis: {
-                type: 'category',
-                data: xAxisData,
-                axisLabel: {
-                    rotate: 45,
+            grid: [
+                { // 上段：メインチャート
+                    left: '100', right: '4%', height: '50%', top: '8%'
                 },
-            },
-            yAxis: {
-                type: 'value',
-                name: state.characteristicId || '値',
-            },
+                { // 下段：イベントタイムライン
+                    left: '100', right: '4%', top: '66%', height: '14%'
+                }
+            ],
+            xAxis: [
+                { // メインX軸
+                    gridIndex: 0,
+                    type: 'category',
+                    data: xAxisData,
+                    axisLabel: { show: false },
+                    axisTick: { show: false }
+                },
+                { // イベントX軸
+                    gridIndex: 1,
+                    type: 'category',
+                    data: xAxisData,
+                    position: 'bottom',
+                    axisLabel: { margin: 14 }
+                }
+            ],
+            yAxis: [
+                { // メインY軸
+                    gridIndex: 0,
+                    type: 'value',
+                    name: state.characteristicId || '値',
+                },
+                { // イベントY軸（カテゴリ）
+                    gridIndex: 1,
+                    type: 'category',
+                    data: eventCategories,
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { show: true, lineStyle: { type: 'dashed' } },
+                    axisLabel: {
+                        interval: 0,
+                        width: 90,
+                        overflow: 'break'
+                    }
+                }
+            ],
             visualMap: {
                 show: true,
                 min: minVal,
@@ -615,18 +894,41 @@ function renderColorChart() {
                     color: ['#10b981', '#f59e0b', '#ef4444'],
                 },
                 orient: 'horizontal',
-                bottom: 0,
+                right: 10,
+                top: 0
             },
+            dataZoom: [
+                {
+                    type: 'inside',
+                    xAxisIndex: [0, 1],
+                    start: 0,
+                    end: 100,
+                },
+                {
+                    type: 'slider',
+                    xAxisIndex: [0, 1],
+                    start: 0,
+                    end: 100,
+                    bottom: 10,
+                    height: 30
+                },
+            ],
             series: [{
                 type: 'bar',
+                xAxisIndex: 0,
+                yAxisIndex: 0,
                 data: values,
                 itemStyle: {
                     borderRadius: [4, 4, 0, 0],
                 },
-                markLine: markLines.length > 0 ? {
-                    silent: true,
-                    data: markLines,
-                } : undefined,
+            },
+            { // イベント：散布図
+                name: 'イベント',
+                type: 'scatter',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                symbolSize: 10,
+                data: eventSeriesData
             }],
         };
 
@@ -738,6 +1040,13 @@ function changePage(delta) {
     if (newPage >= 1 && newPage <= getTotalPages()) {
         state.currentPage = newPage;
         renderDetailTable();
+    }
+}
+
+function toggleDateInputs(show) {
+    const container = document.getElementById('date-range-container');
+    if (container) {
+        container.style.display = show ? 'flex' : 'none';
     }
 }
 
