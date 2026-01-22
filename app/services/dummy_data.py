@@ -13,6 +13,8 @@ MODEL_NUMBERS = {
 }
 EVENT_TYPES = ["FW更新", "部品交換", "メンテナンス", "不具合発生"]
 EVENT_CATEGORIES = ["動作不良", "センサー異常", "通信エラー", "部品劣化"]
+DEFECT_CODES = [f"E{i}" for i in range(101, 120)] # E101-E119
+PATROL_LOGICS = ["温度異常検知", "振動異常検知", "通信切断検知", "モーター過負荷検知", "電圧低下検知"]
 FW_VERSIONS = ["1.0.0", "1.1.0", "1.2.0", "2.0.0", "2.1.0", "2.2.0"]
 CHARACTERISTIC_CATEGORIES = ["センサー", "モーター", "通信", "電源"]
 CHARACTERISTIC_IDS = {
@@ -262,3 +264,448 @@ def get_available_characteristic_ids(category: str) -> dict:
         "quantitative": quantitative,
         "qualitative": qualitative,
     }
+
+
+def search_machines_by_defect(
+    series: Optional[str],
+    date_start: Optional[date],
+    date_end: Optional[date],
+    category: Optional[str],
+) -> list[dict]:
+    """不具合条件で機番を検索（ダミー）"""
+    rng = random.Random() # 毎回ランダムでOK、あるいは固定シードでも可
+    
+    count = rng.randint(5, 20)
+    results = []
+    
+    for _ in range(count):
+        machine = generate_dummy_machine()
+        # 検索条件に合わせたダミーデータを生成
+        
+        # 日付生成 (指定範囲内、またはデフォルト範囲)
+        s = date_start or date(2023, 1, 1)
+        e = date_end or date.today()
+        days_diff = (e - s).days
+        if days_diff < 0: days_diff = 0
+        event_date = s + timedelta(days=rng.randint(0, days_diff))
+        
+        results.append({
+            "machine_id": machine["machine_number"],
+            "series": series or machine["model_series"], # 条件が指定されていればそれに合わせる
+            "defect_category": category or rng.choice(EVENT_CATEGORIES),
+            "defect_date": event_date.isoformat(),
+            "manufacturing_month": machine["manufacture_month"][:7],
+        })
+        
+    return results
+
+
+def search_machines_by_attribute(
+    series: Optional[str],
+    machine_id_part: Optional[str],
+    month_start: Optional[str], # YYYY-MM
+    month_end: Optional[str],   # YYYY-MM
+) -> list[dict]:
+    """属性条件で機番を検索（ダミー）"""
+    rng = random.Random()
+    
+    count = rng.randint(5, 20)
+    results = []
+    
+    for _ in range(count):
+        machine = generate_dummy_machine()
+        
+        # 部分一致検索のシミュレーション
+        m_id = machine["machine_number"]
+        if machine_id_part:
+            # 確率でマッチさせるか、強制的にマッチさせる
+            if rng.random() > 0.5:
+                prefix = m_id.split('-')[0]
+                m_id = f"{prefix}-{machine_id_part}{rng.randint(10,99)}"
+        
+        results.append({
+            "machine_id": m_id,
+            "series": series or machine["model_series"],
+            "defect_category": "-", # 属性検索なので不具合情報は空または代表値
+            "defect_date": "-",
+            "manufacturing_month": machine["manufacture_month"][:7],
+        })
+            
+    return results
+
+
+def get_model_list(series: str) -> list[str]:
+    """シリーズに属する機種リストを返す"""
+    return MODEL_NUMBERS.get(series, [])
+
+
+
+def _generate_consistent_defect_data(
+    series: str,
+    models: list[str],
+    start_date: date,
+    end_date: date,
+) -> list[dict]:
+    """
+    一貫性のある不具合データを生成する内部関数
+    すべてのチャートとリストはこのデータを元に集計する
+    """
+    # フィルタ条件をシードにして、同じ条件なら常に同じデータが生成されるようにする
+    seed_str = f"{series}_{models}_{start_date}_{end_date}_consistent"
+    rng = random.Random(seed_str)
+
+    results = []
+    
+    # 期間から日数を計算
+    days_diff = (end_date - start_date).days
+    if days_diff < 0: days_diff = 0
+    
+    # 利用可能なモデル
+    available_models = models if models else MODEL_NUMBERS.get(series, [])
+    if not available_models:
+        available_models = ["Unknown"]
+        
+    # 生成する不具合件数を決定（期間とモデル数に比例させる）
+    # 例: 1モデルあたり月5件程度
+    months = max(1, days_diff // 30)
+    base_count = len(available_models) * months * 5
+    count = rng.randint(int(base_count * 0.8), int(base_count * 1.2))
+    
+    # 製造月の範囲（不具合発生日より前である必要がある）
+    # 簡易的に2020年から開始とする
+    
+    for _ in range(count):
+        defect_date = start_date + timedelta(days=rng.randint(0, days_diff))
+        
+        # 製造月をランダムに決定（不具合発生より1ヶ月〜3年前）
+        manufacture_date = defect_date - timedelta(days=rng.randint(30, 365 * 3))
+        manufacture_month = manufacture_date.replace(day=1).strftime("%Y-%m")
+        
+        model = rng.choice(available_models)
+        machine_no = f"{series}-{model}-{rng.randint(1000, 9999)}"
+        
+        # 機番属性（簡易生成）
+        results.append({
+            "machine_id": machine_no,
+            "series": series,
+            "model": model,
+            "defect_date": defect_date.isoformat(),
+            "defect_category": rng.choice(EVENT_CATEGORIES),
+            "defect_code": rng.choice(DEFECT_CODES), # Use fixed codes
+            "manufacturing_month": manufacture_month,
+        })
+        
+    return results
+
+
+def get_defect_trend_data(
+    series: str,
+    models: list[str],
+    start_date: date,
+    end_date: date,
+    defect_categories: list[str] = [],
+    defect_code: str = "",
+) -> dict:
+    """不具合発生推移データ（チャート用）を生成（一貫性版）"""
+    # 共通データ生成
+    defects = _generate_consistent_defect_data(series, models, start_date, end_date)
+    
+    # フィルタリング
+    if defect_categories:
+        defects = [d for d in defects if d["defect_category"] in defect_categories]
+    if defect_code:
+        defects = [d for d in defects if defect_code in d["defect_code"]]
+    
+    # 日付ごとの集計
+    date_counts = {}
+    current = start_date
+    while current <= end_date:
+        date_counts[current.isoformat()] = 0
+        current += timedelta(days=1)
+        
+    for d in defects:
+        defect_date = d["defect_date"]
+        # 範囲内の日付のみカウント（共通関数は範囲内のみ生成するはずだが念のため）
+        if defect_date in date_counts:
+            date_counts[defect_date] += 1
+            
+    #ソートしてリスト化
+    sorted_dates = sorted(date_counts.keys())
+    counts = [date_counts[d] for d in sorted_dates]
+    
+    return {
+        "dates": sorted_dates,
+        "counts": counts,
+    }
+
+
+def get_machines_matching_filter(
+    series: str,
+    models: list[str],
+    start_date: date,
+    end_date: date,
+    page: int = 1,
+    page_size: int = 20,
+    defect_categories: list[str] = [],
+    defect_code: str = "",
+    sort_field: str = "defect_date",
+    sort_order: str = "desc",
+) -> dict:
+    """フィルタ条件に合致する機番リスト（テーブル用）を生成（一貫性版・ページネーション対応）"""
+    # 共通データ生成
+    all_results = _generate_consistent_defect_data(series, models, start_date, end_date)
+    
+    # フィルタリング
+    if defect_categories:
+        all_results = [d for d in all_results if d["defect_category"] in defect_categories]
+    if defect_code:
+        all_results = [d for d in all_results if defect_code in d["defect_code"]]
+    
+    # ソート
+    reverse = (sort_order == "desc")
+    # キーのマッピング (Frontend field name -> Dict key)
+    # machine_id, series, model, defect_date, defect_category
+    key_map = {
+        "machine_id": "machine_id",
+        "series": "series",
+        "model": "model",
+        "defect_date": "defect_date",
+        "defect_category": "defect_category"
+    }
+    sort_key = key_map.get(sort_field, "defect_date")
+    
+    all_results.sort(key=lambda x: x.get(sort_key, ""), reverse=reverse)
+    
+    # ページネーション処理
+    total_count = len(all_results)
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    
+    items = all_results[start_idx:end_idx]
+    
+    return {
+        "items": items,
+        "total": total_count,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+def get_manufacturing_distribution(
+    series: str,
+    models: list[str],
+    start_date: date,
+    end_date: date,
+    defect_categories: list[str] = [],
+    defect_code: str = "",
+) -> dict:
+    """製造月別分布データ（チャート用）を生成（一貫性版）"""
+    # 共通データ生成（これが「不具合発生台数」の母集団になる）
+    defects = _generate_consistent_defect_data(series, models, start_date, end_date)
+    
+    # フィルタリング
+    if defect_categories:
+        defects = [d for d in defects if d["defect_category"] in defect_categories]
+    if defect_code:
+        defects = [d for d in defects if defect_code in d["defect_code"]]
+
+    # 不具合データの製造月集計
+    defect_counts_by_month = {}
+    for d in defects:
+        m = d["manufacturing_month"]
+        defect_counts_by_month[m] = defect_counts_by_month.get(m, 0) + 1
+        
+    # 表示する月の範囲を決定（データが存在する範囲 ＋ 前後）
+    if not defect_counts_by_month:
+        # データがない場合は直近1年
+        months = []
+        current = date.today().replace(day=1)
+        for i in range(12):
+            months.insert(0, (current - timedelta(days=30*i)).strftime("%Y-%m"))
+    else:
+        # データがある月を収集してソート
+        sorted_exist_months = sorted(defect_counts_by_month.keys())
+        first_month = sorted_exist_months[0]
+        last_month = sorted_exist_months[-1]
+        
+        # 月リスト生成
+        months = []
+        y, m = map(int, first_month.split('-'))
+        curr = date(y, m, 1)
+        end_y, end_m = map(int, last_month.split('-'))
+        last = date(end_y, end_m, 1)
+        
+        while curr <= last:
+            months.append(curr.strftime("%Y-%m"))
+            if curr.month == 12:
+                curr = curr.replace(year=curr.year + 1, month=1)
+            else:
+                curr = curr.replace(month=curr.month + 1)
+                
+    # データ整形
+    defect_counts = []
+    total_counts = []
+    
+    # トータル台数生成用の乱数（ここは不具合データとは独立してよいが、シードは条件固定）
+    rng = random.Random(f"{series}_{models}_total_counts")
+    
+    for month in months:
+        d_count = defect_counts_by_month.get(month, 0)
+        defect_counts.append(d_count)
+        
+        # 全生産台数は、不具合数より多くなるようにそれっぽく生成
+        # 不具合率 0.1% ~ 5% 程度と仮定して逆算
+        if d_count > 0:
+            rate = rng.uniform(0.001, 0.05)
+            total = int(d_count / rate)
+        else:
+            total = rng.randint(100, 1000)
+            
+        total_counts.append(total)
+        
+    return {
+        "months": months,
+        "defect_counts": defect_counts,
+        "total_counts": total_counts,
+    }
+
+
+def _generate_consistent_patrol_data(
+    rank: Optional[str],
+    series: Optional[str],
+    models: list[str],
+    start_date: date,
+    end_date: date,
+) -> list[dict]:
+    """
+    一貫性のあるパトロール結果データを生成する内部関数
+    """
+    seed_str = f"{rank}_{series}_{models}_{start_date}_{end_date}_patrol"
+    rng = random.Random(seed_str)
+    
+    results = []
+    
+    # モデル
+    available_series = [series] if series else MODEL_SERIES
+    
+    # 件数生成（適当）
+    days_diff = (end_date - start_date).days
+    if days_diff < 0: days_diff = 0
+    
+    count = rng.randint(20, 100)
+    
+    for _ in range(count):
+        # シリーズ決定
+        this_series = rng.choice(available_series)
+        
+        # モデル決定
+        available_models = models if (models and series == this_series) else MODEL_NUMBERS.get(this_series, ["Unknown"])
+        if not available_models: available_models = ["Unknown"]
+        this_model = rng.choice(available_models)
+        
+        # ランク
+        this_rank = rank if rank else rng.choice(["A", "B", "C"])
+        
+        # 日付
+        patrol_date = start_date + timedelta(days=rng.randint(0, days_diff))
+        
+        # アラートフラグ（ランクAはアラート率高いとか）
+        is_alert = False
+        if this_rank == "A":
+            is_alert = rng.random() > 0.3
+        elif this_rank == "B":
+            is_alert = rng.random() > 0.7
+        else:
+            is_alert = rng.random() > 0.95
+            
+        machine_no = f"{this_series}-{this_model}-{rng.randint(1000, 9999)}"
+        
+        results.append({
+            "rank": this_rank,
+            "series": this_series,
+            "model": this_model,
+            "machine_id": machine_no,
+            "defect_category": rng.choice(EVENT_CATEGORIES),
+            "defect_code": rng.choice(DEFECT_CODES),
+            "patrol_date": patrol_date.isoformat(),
+            "target_date": (patrol_date - timedelta(days=1)).isoformat(), # パトロール対象日は前日とする
+            "defect_count": rng.randint(1, 10),
+            "logic_content": rng.choice(PATROL_LOGICS),
+            "alert_flag": is_alert,
+        })
+        
+    return results
+
+
+def get_patrol_results(
+    rank: Optional[str],
+    series: Optional[str],
+    models: list[str],
+    defect_category: Optional[str],
+    defect_code: Optional[str],
+    start_date: date,
+    end_date: date,
+    logic_content: Optional[str],
+    alert_flag: Optional[bool],
+    page: int = 1,
+    page_size: int = 20,
+    sort_field: str = "patrol_date",
+    sort_order: str = "desc",
+) -> dict:
+    """パトロール結果一覧を取得"""
+    
+    # 共通データ生成
+    results = _generate_consistent_patrol_data(rank, series, models, start_date, end_date)
+    
+    # フィルタリング (rank, series, models は生成時に反映済みだが、他パラメータでフィルタ)
+    if defect_category:
+        results = [r for r in results if r["defect_category"] == defect_category]
+    
+    if defect_code:
+        results = [r for r in results if defect_code in r["defect_code"]]
+        
+    if logic_content:
+        results = [r for r in results if logic_content in r["logic_content"]]
+        
+    if alert_flag is not None:
+        results = [r for r in results if r["alert_flag"] == alert_flag]
+        
+    # ソート
+    reverse = (sort_order == "desc")
+    # key mapping
+    key_map = {
+        "rank": "rank",
+        "series": "series",
+        "model": "model",
+        "machine_id": "machine_id",
+        "defect_category": "defect_category",
+        "defect_code": "defect_code",
+        "patrol_date": "patrol_date", # UIで「パトロール日」とするか「対象日」とするかによるが、specは「パトロール対象日」
+        "target_date": "target_date",
+        "defect_count": "defect_count",
+        "logic_content": "logic_content",
+        "alert_flag": "alert_flag",
+    }
+    
+    # specでは「パトロール対象日」なので target_date をデフォルトにすべきか？
+    # sort_fieldが "patrol_date" で来たら target_date を使う仕様にするなど調整
+    # ここでは単純にマッピング。UIからは "target_date" を送る想定にする。
+    
+    sort_key = key_map.get(sort_field, "target_date")
+    
+    results.sort(key=lambda x: str(x.get(sort_key, "")), reverse=reverse)
+    
+    # ページネーション
+    total_count = len(results)
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    
+    items = results[start_idx:end_idx]
+    
+    return {
+        "items": items,
+        "total": total_count,
+        "page": page,
+        "page_size": page_size,
+    }
+

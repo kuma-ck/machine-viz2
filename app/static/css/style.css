@@ -612,3 +612,187 @@ body {
         align-items: flex-start;
     }
 }
+/* Search Page Styles */
+.search-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-md);
+}
+
+.search-header {
+    margin-bottom: var(--spacing-lg);
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.tab-btn {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border: none;
+    background: none;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+}
+
+.tab-btn.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Search Form */
+.search-form-card {
+    background: var(--bg-surface);
+    padding: var(--spacing-lg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    margin-bottom: var(--spacing-lg);
+}
+
+.form-row {
+    display: flex;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+}
+
+.form-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.date-range {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-lg);
+}
+
+/* Results Table */
+.search-results {
+    background: var(--bg-surface);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    padding: var(--spacing-md);
+}
+
+.search-results.hidden {
+    display: none;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-table th {
+    background: var(--bg-background);
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.link-btn {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.link-btn:hover {
+    text-decoration: underline;
+}
+
+/* Dropdown Multiselect Styles */
+.dropdown-multiselect {
+    position: relative;
+    width: 100%;
+}
+
+.dropdown-content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    z-index: 1000;
+    margin-top: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.dropdown-content.hidden {
+    display: none;
+}
+
+.dropdown-header {
+    padding: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-background);
+}
+
+.dropdown-list {
+    padding: var(--spacing-sm);
+}
+
+.dropdown-item {
+    display: block;
+    padding: 4px 8px;
+}
+
+.dropdown-item:hover {
+    background: var(--bg-background);
+}
+
+/* Stacked Layout (for Defect Trend) */
+.main-area-stacked {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.main-area-stacked .chart-area {
+    min-height: 400px;
+}
+
+.main-area-stacked .search-results {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-area-stacked .table-container {
+    flex: 1;
+    /* max-height removal or adjustment might be needed if we want it to grow */
+    max-height: 500px; 
+}

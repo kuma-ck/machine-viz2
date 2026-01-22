@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}機番検索 - 機器情報可視化{% endblock %}
+
+{% block content %}
+<div class="search-container">
+    <div class="search-header">
+        <h1>機番検索</h1>
+    </div>
+
+    <!-- 検索タブ -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="defect">不具合から検索</button>
+        <button class="tab-btn" data-tab="attribute">機番属性から検索</button>
+    </div>
+
+    <!-- 不具合検索フォーム -->
+    <div id="defect-search" class="tab-content active">
+        <div class="search-form-card">
+            <form id="defect-search-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>機種シリーズ</label>
+                        <select name="series" class="form-select">
+                            <option value="">選択してください</option>
+                            <option value="Series-A">Series-A</option>
+                            <option value="Series-B">Series-B</option>
+                            <option value="Series-C">Series-C</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>不具合発生日</label>
+                        <div class="date-range">
+                            <input type="date" name="defect_date_start" class="form-input">
+                            <span>～</span>
+                            <input type="date" name="defect_date_end" class="form-input">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>不具合分類</label>
+                        <select name="defect_category" class="form-select">
+                            <option value="">選択してください</option>
+                            <option value="E001">電源系</option>
+                            <option value="M001">メカ系</option>
+                            <option value="S001">センサー系</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">検索</button>
+                    <button type="button" class="btn btn-secondary" id="defect-reset">クリア</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 属性検索フォーム -->
+    <div id="attribute-search" class="tab-content">
+        <div class="search-form-card">
+            <form id="attribute-search-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>機種シリーズ</label>
+                        <select name="series" class="form-select">
+                            <option value="">選択してください</option>
+                            <option value="Series-A">Series-A</option>
+                            <option value="Series-B">Series-B</option>
+                            <option value="Series-C">Series-C</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>機種番号</label>
+                        <input type="text" name="machine_id" class="form-input" placeholder="部分一致検索">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>製造月</label>
+                        <div class="date-range">
+                            <input type="month" name="manufacturing_month_start" class="form-input">
+                            <span>～</span>
+                            <input type="month" name="manufacturing_month_end" class="form-input">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">検索</button>
+                    <button type="button" class="btn btn-secondary" id="attribute-reset">クリア</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 検索結果 -->
+    <div id="search-results" class="search-results hidden">
+        <div class="results-header">
+            <h3>検索結果: <span id="result-count">0</span>件</h3>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>機番</th>
+                        <th>シリーズ</th>
+                        <th>不具合分類</th>
+                        <th>発生日</th>
+                        <th>製造月</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="results-body">
+                    <!-- JSで挿入 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/search.js"></script>
+{% endblock %}

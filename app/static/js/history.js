@@ -1546,6 +1546,7 @@ function savePreset() {
 
     const presets = getPresets();
     presets[name] = {
+        machineNumber: state.machineNumber, // Save machine number
         category: state.category,
         characteristicId: state.characteristicId,
         chartType: state.chartType,
@@ -1568,6 +1569,7 @@ async function applyPreset() {
     if (!preset) return;
 
     // 状態を復元（系列1のみ対応）
+    state.machineNumber = preset.machineNumber || ''; // Restore machine number
     state.series[0].category = preset.category || '';
     state.series[0].characteristicId = preset.characteristicId || '';
     state.chartType = preset.chartType || 'line';
@@ -1575,6 +1577,9 @@ async function applyPreset() {
     state.annotations = preset.annotations || state.annotations;
 
     // UIを更新
+    const machineInput = document.getElementById('machine-number');
+    if (machineInput) machineInput.value = state.machineNumber;
+
     const catEl = document.getElementById('category-select-1');
     if (catEl) catEl.value = state.series[0].category;
 

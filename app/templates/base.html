@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,20 +10,29 @@
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     {% block head %}{% endblock %}
 </head>
+
 <body>
     <nav class="navbar">
         <div class="navbar-brand">
             <a href="/">機器情報可視化</a>
         </div>
         <div class="navbar-menu">
-            <a href="/history" class="navbar-item {% if request.url.path.startswith('/history') %}active{% endif %}">機番履歴表示</a>
+            <a href="/patrol/list"
+                class="navbar-item {% if request.url.path.startswith('/patrol') %}active{% endif %}">パトロール結果一覧</a>
+            <a href="/defect-trend"
+                class="navbar-item {% if request.url.path.startswith('/defect-trend') %}active{% endif %}">不具合傾向表示</a>
+            <a href="/search"
+                class="navbar-item {% if request.url.path.startswith('/search') %}active{% endif %}">機番検索</a>
+            <a href="/history"
+                class="navbar-item {% if request.url.path.startswith('/history') %}active{% endif %}">機番履歴表示</a>
         </div>
     </nav>
-    
+
     <main class="main-content">
         {% block content %}{% endblock %}
     </main>
-    
+
     {% block scripts %}{% endblock %}
 </body>
+
 </html>

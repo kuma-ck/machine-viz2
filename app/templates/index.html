@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}ホーム - 機器情報可視化{% endblock %}
+
+{% block head %}
+<style>
+    .home-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+    }
+
+    .home-header {
+        text-align: center;
+        margin-bottom: 3rem;
+    }
+
+    .home-header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+    }
+
+    .home-header p {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+    }
+
+    .workflow-section {
+        margin-bottom: 4rem;
+    }
+
+    .section-title {
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+        padding-left: 1rem;
+        border-left: 4px solid var(--primary-color);
+        color: var(--text-primary);
+    }
+
+    .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+    }
+
+    .nav-card {
+        background: white;
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+        box-shadow: var(--shadow-sm);
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .nav-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-md);
+        border-color: var(--primary-color);
+    }
+
+    .card-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: var(--primary-color);
+    }
+
+    .card-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--text-primary);
+    }
+
+    .card-desc {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+        line-height: 1.6;
+        flex-grow: 1;
+    }
+
+    .flow-steps {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px dashed var(--border-color);
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    .flow-step {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .flow-step:last-child {
+        margin-bottom: 0;
+    }
+
+    .step-arrow {
+        margin: 0 0.5rem;
+        color: var(--text-tertiary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <div class="home-header">
+        <h1>機器情報可視化システム</h1>
+        <p>機番データ、不具合情報、パトロール結果を一元管理・分析</p>
+    </div>
+
+    <!-- パターン1 -->
+    <div class="workflow-section">
+        <h2 class="section-title">不具合監視・分析フロー</h2>
+        <div class="card-grid">
+            <a href="/patrol/list" class="nav-card">
+                <div class="card-icon">🔍</div>
+                <div class="card-title">パトロール結果一覧</div>
+                <div class="card-desc">
+                    定期的な監視ロジックによる検出結果を確認します。
+                    異常検知された機番から不具合傾向を分析します。
+                </div>
+                <div class="flow-steps">
+                    <div class="flow-step">1. パトロール結果確認</div>
+                    <div class="flow-step">↓</div>
+                    <div class="flow-step">2. 不具合傾向分析</div>
+                    <div class="flow-step">↓</div>
+                    <div class="flow-step">3. 機番履歴詳細</div>
+                </div>
+            </a>
+
+            <a href="/defect-trend" class="nav-card">
+                <div class="card-icon">📊</div>
+                <div class="card-title">不具合傾向表示</div>
+                <div class="card-desc">
+                    シリーズや不具合ごとの発生傾向を可視化します。
+                    製造月別の分布比較なども可能です。
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- パターン2 -->
+    <div class="workflow-section">
+        <h2 class="section-title">機番調査フロー</h2>
+        <div class="card-grid">
+            <a href="/search" class="nav-card">
+                <div class="card-icon">🔎</div>
+                <div class="card-title">機番検索</div>
+                <div class="card-desc">
+                    不具合条件や属性条件から機番を検索します。
+                    特定の機番をピンポイントで調査する場合に使用します。
+                </div>
+                <div class="flow-steps">
+                    <div class="flow-step">1. 機番検索</div>
+                    <div class="flow-step">↓</div>
+                    <div class="flow-step">2. 機番履歴詳細</div>
+                </div>
+            </a>
+
+            <a href="/history" class="nav-card">
+                <div class="card-icon">📈</div>
+                <div class="card-title">機番履歴表示</div>
+                <div class="card-desc">
+                    特定機番のイベント履歴、特性値推移を詳細に確認できます。
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
