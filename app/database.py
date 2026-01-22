@@ -34,5 +34,7 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     """データベース初期化（テーブル作成）"""
+    # Import models to register them with metadata
+    from app.models import Machine, Event, CharacteristicValue, PatrolResult
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

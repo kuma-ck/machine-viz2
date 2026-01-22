@@ -45,9 +45,26 @@ async function handleSearch(event, type) {
     event.preventDefault();
     const form = event.target;
     const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
+    const rawData = Object.fromEntries(formData.entries());
 
-    // Show loading state (optional: add spinner)
+    // 空文字列をnullに変換し、日付フィールドを適切にフォーマット
+    const data = {};
+    for (const [key, value] of Object.entries(rawData)) {
+        if (value === '' || value === null || value === undefined) {
+            data[key] = null;
+        } else {
+            data[key] = value;
+        }
+    }
+
+    // 少なくとも1つの検索条件が必要かチェック
+    const hasFilter = Object.values(data).some(v => v !== null);
+    if (!hasFilter) {
+        alert('少なくとも1つの検索条件を指定してください');
+        return;
+    }
+
+    // Show loading state
     const resultsContainer = document.getElementById('search-results');
     const tbody = document.getElementById('results-body');
     tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">検索中...</td></tr>';
@@ -63,7 +80,9 @@ async function handleSearch(event, type) {
         });
 
         if (!response.ok) {
-            throw new Error(`Search failed: ${response.status}`);
+            const errorText = await response.text();
+            console.error('API Error:', errorText);
+            throw new Error(`検索に失敗しました (${response.status})`);
         }
 
         const results = await response.json();
@@ -74,6 +93,7 @@ async function handleSearch(event, type) {
         tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">エラーが発生しました: ${error.message}</td></tr>`;
     }
 }
+
 
 function renderResults(results) {
     const resultsContainer = document.getElementById('search-results');

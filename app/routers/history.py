@@ -1,12 +1,14 @@
 """機番履歴表示API"""
 from datetime import date
 from typing import Optional
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, Request, Query, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.services import dummy_data
+from app.services import dummy_data, crud
+from app.database import get_db
 
 router = APIRouter(prefix="/history", tags=["history"])
 
@@ -27,18 +29,25 @@ async def history_page(request: Request):
 
 
 @router.get("/api/machine/{machine_number}")
-async def get_machine_info(machine_number: str):
+async def get_machine_info(
+    machine_number: str,
+    db: AsyncSession = Depends(get_db)
+):
     """機番属性を取得"""
     if settings.USE_DUMMY_DATA:
         return dummy_data.generate_dummy_machine(machine_number)
-    # TODO: DBから取得
-    return {"error": "Database not implemented"}
+    
+    machine = await crud.get_machine_by_number(db, machine_number)
+    if not machine:
+        return {"error": "Machine not found"}
+    return machine
 
 
 @router.get("/api/events/{machine_number}")
 async def get_events(
     machine_number: str,
     event_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
 ):
     """イベント情報を取得"""
     if settings.USE_DUMMY_DATA:
@@ -46,8 +55,9 @@ async def get_events(
         if event_type:
             events = [e for e in events if e["event_type"] == event_type]
         return {"events": events}
-    # TODO: DBから取得
-    return {"error": "Database not implemented"}
+    
+    events = await crud.get_events(db, machine_number, event_type)
+    return {"events": events}
 
 
 @router.get("/api/characteristics/{machine_number}")
@@ -58,6 +68,7 @@ async def get_characteristics(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     x_axis_type: str = Query(default="monthly", regex="^(monthly|daily|usage)$"),
+    db: AsyncSession = Depends(get_db)
 ):
     """特性値を取得"""
     if settings.USE_DUMMY_DATA:
@@ -72,8 +83,21 @@ async def get_characteristics(
             x_axis_type=x_axis_type,
         )
         return {"values": values}
-    # TODO: DBから取得
-    return {"error": "Database not implemented"}
+    
+    start = date.fromisoformat(start_date) if start_date else None
+    end = date.fromisoformat(end_date) if end_date else None
+    
+    values = await crud.get_characteristics(
+        db,
+        machine_number=machine_number,
+        category=category,
+        characteristic_id=characteristic_id,
+        start_date=start,
+        end_date=end,
+        x_axis_type=x_axis_type,
+    )
+    return {"values": values}
+
 
 
 @router.get("/api/categories")

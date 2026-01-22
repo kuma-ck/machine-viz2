@@ -67,6 +67,8 @@ async function initFilters() {
     if (pCategory) document.getElementById('category-select').value = pCategory;
     if (pCode) document.getElementById('code-select').value = pCode;
 
+    // Initialize multi-select dropdown
+    setupMultiSelect();
 
     // Create event for series change to load models
     if (pSeries) {
@@ -89,7 +91,64 @@ async function initFilters() {
         // Auto load
         loadData();
     }
+
+    // 検索ボタンのイベントハンドラ
+    const searchBtn = document.getElementById('search-btn');
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+            const series = document.getElementById('series-select').value;
+            if (!series) {
+                alert('シリーズを選択してください');
+                return;
+            }
+            state.currentPage = 1;
+            loadData();
+        });
+    }
+
+    // ページネーション
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
+    const pageSizeSelect = document.getElementById('page-size');
+    const pageInput = document.getElementById('current-page-input');
+
+    if (prevBtn) prevBtn.addEventListener('click', () => changePage(-1));
+    if (nextBtn) nextBtn.addEventListener('click', () => changePage(1));
+    if (pageSizeSelect) {
+        pageSizeSelect.addEventListener('change', () => {
+            state.pageSize = parseInt(pageSizeSelect.value);
+            state.currentPage = 1;
+            loadData();
+        });
+    }
+    if (pageInput) {
+        pageInput.addEventListener('change', () => {
+            const totalPages = Math.ceil(state.totalItems / state.pageSize);
+            let page = parseInt(pageInput.value);
+            if (page < 1) page = 1;
+            if (page > totalPages) page = totalPages;
+            state.currentPage = page;
+            loadData();
+        });
+    }
+
+    // 機番コピーボタン
+    const copyBtn = document.getElementById('copy-machines-btn');
+    if (copyBtn) {
+        copyBtn.addEventListener('click', copySelectedMachines);
+    }
+
+    // テーブル全選択チェックボックス
+    const selectAll = document.getElementById('table-select-all');
+    if (selectAll) {
+        selectAll.addEventListener('change', (e) => {
+            document.querySelectorAll('.machine-checkbox').forEach(cb => {
+                cb.checked = e.target.checked;
+            });
+        });
+    }
 }
+
 
 function initSorting() {
     document.querySelectorAll('th.sortable').forEach(th => {
@@ -291,13 +350,18 @@ function renderChart(data) {
         grid: {
             left: '3%',
             right: '4%',
-            bottom: '3%',
+            bottom: '15%',
             containLabel: true
         },
         xAxis: {
             type: 'category',
             data: data.dates,
-            boundaryGap: true
+            boundaryGap: true,
+            axisLabel: {
+                rotate: 45,
+                fontSize: 10,
+                interval: 'auto'
+            }
         },
         yAxis: {
             type: 'value',
@@ -335,14 +399,20 @@ function renderDistributionChart(data) {
         },
         grid: {
             left: '3%',
-            right: '15%', // Make room for 2 right axes
-            bottom: '3%',
+            right: '15%',
+            bottom: '20%',
             containLabel: true
         },
         xAxis: {
             type: 'category',
             data: data.months,
-            name: '製造月'
+            name: '製造月',
+            nameLocation: 'middle',
+            nameGap: 50,
+            axisLabel: {
+                rotate: 45,
+                fontSize: 10
+            }
         },
         yAxis: [
             {
