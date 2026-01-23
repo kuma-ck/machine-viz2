@@ -87,11 +87,20 @@ async def get_characteristics(
     result = await db.execute(stmt)
     values = result.scalars().all()
     
-    # x_axis_type filtering logic (simple version for now: return all matches)
-    # The dummy data generator generated daily vs monthly data on the fly.
-    # In DB, we persisted whatever seed generated.
-    # Ideally, we should aggregate if 'monthly' is requested but DB has daily, but for now we return what matches.
+    # If x_axis_type is 'daily' and we need finer granularity,
+    # generate dummy data dynamically since DB only has monthly data
+    if x_axis_type == "daily" and category and characteristic_id:
+        # Generate daily dummy data using the dummy_data module
+        return dummy_data.generate_dummy_characteristics(
+            machine_number=machine_number,
+            category=category,
+            characteristic_id=characteristic_id,
+            start_date=start_date,
+            end_date=end_date,
+            x_axis_type="daily"
+        )
     
+    # For monthly or usage, return DB data
     return [
         {
             "machine_number": machine_number,
