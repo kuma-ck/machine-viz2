@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import history, search, defect_trend, patrol_result
+from app.routers import history, search, defect_trend, patrol_result, data_catalog
 
 settings = get_settings()
 templates = Jinja2Templates(directory="app/templates")
@@ -38,6 +38,7 @@ app.include_router(history.router)
 app.include_router(search.router)
 app.include_router(defect_trend.router)
 app.include_router(patrol_result.router)
+app.include_router(data_catalog.router)
 
 
 @app.get("/", response_class=HTMLResponse)

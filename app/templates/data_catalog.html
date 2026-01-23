@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}データカタログ - Mona{% endblock %}
+
+{% block head %}
+<style>
+    .catalog-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: var(--spacing-lg);
+    }
+
+    .catalog-header {
+        text-align: center;
+        margin-bottom: var(--spacing-xl);
+    }
+
+    .catalog-header h1 {
+        color: var(--color-primary);
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .catalog-header p {
+        color: var(--text-secondary);
+    }
+
+    .entity-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+        gap: var(--spacing-lg);
+    }
+
+    .entity-card {
+        background: var(--bg-secondary);
+        border-radius: var(--radius-lg);
+        padding: var(--spacing-lg);
+        border: 1px solid var(--border-color);
+    }
+
+    .entity-header {
+        display: flex;
+        align-items: baseline;
+        gap: var(--spacing-sm);
+        margin-bottom: var(--spacing-md);
+        padding-bottom: var(--spacing-sm);
+        border-bottom: 2px solid var(--color-primary);
+    }
+
+    .entity-name {
+        font-size: var(--font-size-lg);
+        font-weight: 700;
+        color: var(--color-primary);
+        font-family: 'Consolas', 'Monaco', monospace;
+    }
+
+    .entity-name-ja {
+        font-size: var(--font-size-base);
+        color: var(--text-secondary);
+    }
+
+    .entity-description {
+        color: var(--text-secondary);
+        font-size: var(--font-size-sm);
+        margin-bottom: var(--spacing-md);
+    }
+
+    .columns-section h3,
+    .samples-section h3 {
+        font-size: var(--font-size-sm);
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .columns-table {
+        width: 100%;
+        font-size: var(--font-size-sm);
+        margin-bottom: var(--spacing-md);
+    }
+
+    .columns-table th {
+        text-align: left;
+        padding: 6px 8px;
+        background: var(--bg-tertiary);
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        font-weight: 600;
+    }
+
+    .columns-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .columns-table .col-name {
+        font-family: 'Consolas', 'Monaco', monospace;
+        color: var(--color-primary);
+    }
+
+    .columns-table .col-type {
+        color: var(--text-muted);
+        font-size: var(--font-size-xs);
+    }
+
+    .samples-section {
+        background: var(--bg-tertiary);
+        padding: var(--spacing-sm);
+        border-radius: var(--radius-md);
+    }
+
+    .sample-item {
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .sample-label {
+        font-weight: 600;
+        color: var(--text-secondary);
+        font-size: var(--font-size-xs);
+        margin-bottom: 2px;
+    }
+
+    .sample-values {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .sample-tag {
+        background: var(--color-primary);
+        color: white;
+        padding: 2px 8px;
+        border-radius: var(--radius-sm);
+        font-size: var(--font-size-xs);
+    }
+
+    .sample-nested {
+        margin-left: var(--spacing-sm);
+        font-size: var(--font-size-xs);
+    }
+
+    .sample-nested-label {
+        color: var(--text-muted);
+        font-style: italic;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="catalog-container">
+    <div class="catalog-header">
+        <h1>📊 データカタログ</h1>
+        <p>Monaで使用しているデータエンティティの一覧と構造</p>
+    </div>
+
+    <div class="entity-grid">
+        {% for entity in catalog.entities %}
+        <div class="entity-card">
+            <div class="entity-header">
+                <span class="entity-name">{{ entity.name }}</span>
+                <span class="entity-name-ja">{{ entity.name_ja }}</span>
+            </div>
+
+            <p class="entity-description">{{ entity.description }}</p>
+
+            <div class="columns-section">
+                <h3>カラム定義</h3>
+                <table class="columns-table">
+                    <thead>
+                        <tr>
+                            <th>カラム名</th>
+                            <th>型</th>
+                            <th>説明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for col in entity.columns %}
+                        <tr>
+                            <td class="col-name">{{ col.name }}</td>
+                            <td class="col-type">{{ col.type }}</td>
+                            <td>{{ col.description }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="samples-section">
+                <h3>マスターデータ例</h3>
+                {% for key, value in entity.sample_values.items() %}
+                <div class="sample-item">
+                    <div class="sample-label">{{ key }}</div>
+                    {% if value is mapping %}
+                    <div class="sample-nested">
+                        {% for k, v in value.items() %}
+                        <div>
+                            <span class="sample-nested-label">{{ k }}:</span>
+                            <span class="sample-values">
+                                {% for item in v %}
+                                <span class="sample-tag">{{ item }}</span>
+                                {% endfor %}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="sample-values">
+                        {% for item in value %}
+                        <span class="sample-tag">{{ item }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

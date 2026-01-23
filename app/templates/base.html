@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Mona{% endblock %}</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/style.css">
     <!-- ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
@@ -25,6 +27,8 @@
                 class="navbar-item {% if request.url.path.startswith('/search') %}active{% endif %}">機番検索</a>
             <a href="/history"
                 class="navbar-item {% if request.url.path.startswith('/history') %}active{% endif %}">機番履歴表示</a>
+            <a href="/data-catalog"
+                class="navbar-item {% if request.url.path.startswith('/data-catalog') %}active{% endif %}">データカタログ</a>
         </div>
     </nav>
 
