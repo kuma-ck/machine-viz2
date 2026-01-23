@@ -1,6 +1,6 @@
 const state = {
     currentPage: 1,
-    pageSize: 20,
+    pageSize: 30,
     totalItems: 0,
     sortField: 'patrol_date',
     sortOrder: 'desc'

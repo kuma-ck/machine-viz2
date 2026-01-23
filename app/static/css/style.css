@@ -424,7 +424,7 @@ body {
 }
 
 .info-label {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -432,7 +432,7 @@ body {
 }
 
 .info-value {
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-base);
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -1044,4 +1044,153 @@ body {
     flex: 1;
     /* max-height removal or adjustment might be needed if we want it to grow */
     max-height: 500px;
+}
+
+/* ===================================
+   パトロール結果一覧 - コンパクトレイアウト
+   =================================== */
+
+/* コンパクトフィルターバー */
+.compact-filter {
+    padding: 6px var(--spacing-md);
+}
+
+.filter-row-compact {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: var(--spacing-xs);
+    overflow-x: auto;
+}
+
+.filter-row-compact .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.filter-row-compact .filter-group label {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.date-range-compact {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.date-range-compact input[type="date"] {
+    width: 130px;
+    font-size: 12px;
+    padding: 4px 6px;
+}
+
+.date-range-compact span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* パトロールメインエリア - フル幅 */
+.patrol-main {
+    grid-template-columns: 1fr;
+}
+
+/* 結果ヘッダー - コンパクト */
+.results-header-compact {
+    display: flex;
+    align-items: center;
+    padding: 6px 0;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.results-header-compact .result-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.results-header-compact .result-label strong {
+    color: var(--color-primary);
+    font-weight: 700;
+}
+
+/* 高密度テーブル */
+.data-table.dense th,
+.data-table.dense td {
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.data-table.dense th {
+    font-size: 11px;
+    padding: 6px 8px;
+}
+
+/* ページネーション - コンパクト */
+.pagination-compact {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+}
+
+.pagination-info-compact {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.pagination-controls-compact {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pagination-controls-compact select {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.pagination-controls-compact .btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-width: 28px;
+}
+
+.page-indicator {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.page-indicator input {
+    width: 40px;
+    padding: 2px 4px;
+    font-size: 12px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+/* メインコンテンツのパディング調整 */
+.main-content:has(.patrol-main) {
+    padding: var(--spacing-sm);
+}
+
+/* ナビバーのスリム化（オプション） */
+@media (max-height: 800px) {
+    .navbar {
+        padding: 6px var(--spacing-xl);
+    }
+
+    .main-content {
+        padding: var(--spacing-sm);
+    }
 }

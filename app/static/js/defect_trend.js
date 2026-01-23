@@ -49,10 +49,10 @@ async function initFilters() {
     const pEnd = params.get('end');
     const pModel = params.get('model');
 
-    // Date defaults
+    // Date defaults - 2年間をデフォルトに
     const today = new Date();
     const start = new Date();
-    start.setDate(today.getDate() - 30);
+    start.setFullYear(today.getFullYear() - 2);
 
     const startDateInput = document.getElementById('start-date');
     const endDateInput = document.getElementById('end-date');

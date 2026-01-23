@@ -421,6 +421,27 @@ function toggleEmptyState(show) {
     }
 }
 
+// データがない場合のメッセージ表示
+function showNoDataMessage() {
+    const emptyState = document.getElementById('empty-state');
+    const mainChartDom = document.getElementById('main-chart');
+
+    if (emptyState) {
+        emptyState.innerHTML = `
+            <div class="empty-state-icon">📭</div>
+            <h3>該当する特性値データがありません</h3>
+            <p style="color: var(--text-secondary); font-size: 14px;">
+                選択された期間・条件に該当するデータが見つかりませんでした。<br>
+                別のカテゴリーや特性値、期間をお試しください。
+            </p>
+        `;
+        emptyState.style.display = 'flex';
+    }
+    if (mainChartDom) {
+        mainChartDom.style.display = 'none';
+    }
+}
+
 async function loadCharacteristics() {
     if (!state.machineNumber) return;
 
@@ -473,6 +494,7 @@ async function loadCharacteristics() {
 
         // グラフ表示完了（データがある場合のみ）
         const hasData = state.series.some(s => s.visible && s.data.length > 0);
+        const hasSelection = state.series.some(s => s.visible && s.category && s.characteristicId);
 
         if (hasData) {
             state.chartDisplayed = true;
@@ -481,10 +503,14 @@ async function loadCharacteristics() {
             updateChartTitle();
             renderChart();
             renderDetailTable();
+        } else if (hasSelection) {
+            // カテゴリーと特性値は選択されているが、データが空の場合
+            state.chartDisplayed = false;
+            showNoDataMessage();
+            renderChart(); // チャートをクリア
         } else {
-            // データがない場合（クリアされた場合など）
-            // 必要ならEmptyStateに戻すか、空のチャートを出す
-            // ここではChart.clear()がrenderChartで行われる
+            // 何も選択されていない場合
+            toggleEmptyState(true);
             renderChart();
         }
 

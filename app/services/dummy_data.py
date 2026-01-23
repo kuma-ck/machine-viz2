@@ -351,7 +351,7 @@ def _generate_consistent_defect_data(
     すべてのチャートとリストはこのデータを元に集計する
     """
     # フィルタ条件をシードにして、同じ条件なら常に同じデータが生成されるようにする
-    seed_str = f"{series}_{models}_{start_date}_{end_date}_consistent"
+    seed_str = f"{series}_{models}_{start_date}_{end_date}_consistent_v2"
     rng = random.Random(seed_str)
 
     results = []
@@ -366,19 +366,18 @@ def _generate_consistent_defect_data(
         available_models = ["Unknown"]
         
     # 生成する不具合件数を決定（期間とモデル数に比例させる）
-    # 例: 1モデルあたり月5件程度
+    # 1モデルあたり月15件程度に増加（以前は5件）
     months = max(1, days_diff // 30)
-    base_count = len(available_models) * months * 5
-    count = rng.randint(int(base_count * 0.8), int(base_count * 1.2))
+    base_count = len(available_models) * months * 15
+    count = rng.randint(int(base_count * 0.9), int(base_count * 1.1))
     
     # 製造月の範囲（不具合発生日より前である必要がある）
-    # 簡易的に2020年から開始とする
     
     for _ in range(count):
         defect_date = start_date + timedelta(days=rng.randint(0, days_diff))
         
-        # 製造月をランダムに決定（不具合発生より1ヶ月〜3年前）
-        manufacture_date = defect_date - timedelta(days=rng.randint(30, 365 * 3))
+        # 製造月をランダムに決定（不具合発生より1ヶ月〜1.5年前に狭める）
+        manufacture_date = defect_date - timedelta(days=rng.randint(30, int(365 * 1.5)))
         manufacture_month = manufacture_date.replace(day=1).strftime("%Y-%m")
         
         model = rng.choice(available_models)
@@ -396,6 +395,7 @@ def _generate_consistent_defect_data(
         })
         
     return results
+
 
 
 def get_defect_trend_data(

@@ -3,115 +3,117 @@
 {% block title %}パトロール結果一覧 - 機器情報可視化{% endblock %}
 
 {% block content %}
-<div class="filter-bar" style="flex-wrap: wrap;">
-    <!-- フィルター設定 -->
-    <div class="filter-row-primary" style="gap: 1rem; width: 100%; display: flex; flex-wrap: wrap;">
+<div class="filter-bar compact-filter">
+    <!-- フィルター設定 - 1行コンパクト構成 -->
+    <div class="filter-row-compact">
         <div class="filter-group">
-            <label>監視ランク</label>
-            <select id="rank-select" class="form-select form-select-sm">
-                <option value="">全ランク</option>
+            <label>ランク</label>
+            <select id="rank-select" class="form-select form-select-sm" style="width: 70px;">
+                <option value="">全て</option>
                 <option value="A">A</option>
                 <option value="B">B</option>
                 <option value="C">C</option>
             </select>
         </div>
         <div class="filter-group">
-            <label>機種シリーズ</label>
-            <select id="series-select" class="form-select form-select-sm">
-                <option value="">選択してください</option>
-                <option value="A">シリーズA</option>
-                <option value="B">シリーズB</option>
-                <option value="C">シリーズC</option>
+            <label>シリーズ</label>
+            <select id="series-select" class="form-select form-select-sm" style="width: 100px;">
+                <option value="">全て</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
             </select>
         </div>
-        <div class="filter-group" style="flex-grow: 1; max-width: 300px;">
-            <label>機種番号</label>
+        <div class="filter-group">
+            <label>機種</label>
             <div class="dropdown-multiselect">
-                <button id="model-select-btn" class="form-select form-select-sm" style="text-align: left;">
-                    機種を選択（全選択中）
+                <button id="model-select-btn" class="form-select form-select-sm"
+                    style="text-align: left; width: 110px;">
+                    全選択
                 </button>
                 <div id="model-dropdown" class="dropdown-content hidden">
                     <div class="dropdown-header">
-                        <label><input type="checkbox" id="model-select-all" checked> 全選択/解除</label>
+                        <label><input type="checkbox" id="model-select-all" checked> 全選択</label>
                     </div>
-                    <div id="model-list" class="dropdown-list">
-                        <!-- JSで動的生成 -->
-                    </div>
+                    <div id="model-list" class="dropdown-list"></div>
                 </div>
             </div>
         </div>
         <div class="filter-group">
-            <label>不具合分類</label>
-            <select id="category-select" class="form-select form-select-sm">
-                <option value="">全分類</option>
+            <label>分類</label>
+            <select id="category-select" class="form-select form-select-sm" style="width: 100px;">
+                <option value="">全て</option>
                 <option value="動作不良">動作不良</option>
-                <option value="センサー異常">センサー異常</option>
-                <option value="通信エラー">通信エラー</option>
+                <option value="センサー異常">センサー</option>
+                <option value="通信エラー">通信</option>
                 <option value="部品劣化">部品劣化</option>
             </select>
         </div>
         <div class="filter-group">
-            <label>不具合コード</label>
-            <input type="text" id="code-input" class="form-input form-input-sm" placeholder="E123..."
-                style="width: 80px;">
+            <label>コード</label>
+            <input type="text" id="code-input" class="form-input form-input-sm" placeholder="E123" style="width: 70px;">
         </div>
         <div class="filter-group">
-            <label>対象期間</label>
-            <div class="date-range">
-                <input type="date" id="start-date" class="form-input form-input-sm">
-                <span>～</span>
-                <input type="date" id="end-date" class="form-input form-input-sm">
-            </div>
-        </div>
-    </div>
-
-    <div class="filter-row-secondary"
-        style="gap: 1rem; width: 100%; display: flex; align-items: flex-end; margin-top: 0.5rem;">
-        <div class="filter-group">
-            <label>検出ロジック</label>
-            <select id="logic-select" class="form-select form-select-sm">
-                <option value="">全ロジック</option>
-                <option value="温度異常検知">温度異常検知</option>
-                <option value="振動異常検知">振動異常検知</option>
-                <option value="通信切断検知">通信切断検知</option>
-                <option value="モーター過負荷検知">モーター過負荷検知</option>
-                <option value="電圧低下検知">電圧低下検知</option>
+            <label>ロジック</label>
+            <select id="logic-select" class="form-select form-select-sm" style="width: 90px;">
+                <option value="">全て</option>
+                <option value="温度異常検知">温度</option>
+                <option value="振動異常検知">振動</option>
+                <option value="通信切断検知">通信</option>
+                <option value="モーター過負荷検知">モーター</option>
+                <option value="電圧低下検知">電圧</option>
             </select>
         </div>
         <div class="filter-group">
             <label>アラート</label>
-            <select id="alert-select" class="form-select form-select-sm">
+            <select id="alert-select" class="form-select form-select-sm" style="width: 70px;">
                 <option value="">全て</option>
                 <option value="true">あり</option>
                 <option value="false">なし</option>
             </select>
         </div>
-
-        <div style="flex-grow: 1;"></div>
+        <div class="filter-group">
+            <label>期間</label>
+            <div class="date-range-compact">
+                <input type="date" id="start-date" class="form-input form-input-sm">
+                <span>～</span>
+                <input type="date" id="end-date" class="form-input form-input-sm">
+            </div>
+        </div>
         <button id="search-btn" class="btn btn-sm btn-primary">検索</button>
     </div>
 </div>
 
-<div class="main-area">
+<div class="main-area patrol-main">
     <!-- 詳細リストエリア -->
     <div class="search-results">
-        <div class="results-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h3>パトロール結果一覧: <span id="result-count">0</span>件</h3>
+        <div class="results-header-compact">
+            <span class="result-label">検索結果: <strong id="result-count">0</strong>件</span>
         </div>
-        <div class="table-container" style="max-height: 600px; overflow-y: auto;">
-            <table class="data-table compact hoverable">
+        <div class="table-container" style="max-height: calc(100vh - 200px); overflow-y: auto;">
+            <table class="data-table compact hoverable dense">
                 <thead>
                     <tr>
-                        <th class="sortable" data-sort="rank">ランク <span class="sort-icon"></span></th>
-                        <th class="sortable" data-sort="series">機種シリーズ <span class="sort-icon"></span></th>
-                        <th class="sortable" data-sort="model">機種 <span class="sort-icon"></span></th>
-                        <th class="sortable" data-sort="machine_id">機番 <span class="sort-icon"></span></th>
-                        <th class="sortable" data-sort="defect_category">不具合分類 <span class="sort-icon"></span></th>
-                        <th class="sortable" data-sort="defect_code">コード <span class="sort-icon"></span></th>
-                        <th class="sortable" data-sort="target_date">パトロール対象日 <span class="sort-icon"></span></th>
-                        <th class="sortable" data-sort="defect_count">不具合数 <span class="sort-icon"></span></th>
-                        <th class="sortable" data-sort="logic_content">検出ロジック <span class="sort-icon"></span></th>
-                        <th class="sortable" data-sort="alert_flag">アラート <span class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="rank" style="width: 50px;">ランク<span class="sort-icon"></span>
+                        </th>
+                        <th class="sortable" data-sort="series" style="width: 70px;">シリーズ<span class="sort-icon"></span>
+                        </th>
+                        <th class="sortable" data-sort="model" style="width: 70px;">機種<span class="sort-icon"></span>
+                        </th>
+                        <th class="sortable" data-sort="machine_id" style="width: 100px;">機番<span
+                                class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="defect_category" style="width: 80px;">分類<span
+                                class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="defect_code" style="width: 60px;">コード<span
+                                class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="target_date" style="width: 100px;">対象日<span
+                                class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="defect_count" style="width: 50px;">件数<span
+                                class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="logic_content" style="width: 90px;">ロジック<span
+                                class="sort-icon"></span></th>
+                        <th class="sortable" data-sort="alert_flag" style="width: 60px;">警告<span
+                                class="sort-icon"></span></th>
                     </tr>
                 </thead>
                 <tbody id="results-body">
@@ -120,25 +122,22 @@
             </table>
         </div>
 
-        <!-- ページネーション -->
-        <div class="pagination-container"
-            style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
-            <div class="pagination-info">
-                Testing: <span id="total-count">0</span> 件中
-                <span id="start-count">0</span> - <span id="end-count">0</span> 件を表示
+        <!-- ページネーション - コンパクト版 -->
+        <div class="pagination-compact">
+            <div class="pagination-info-compact">
+                <span id="total-count">0</span>件中 <span id="start-count">0</span>-<span id="end-count">0</span>件
             </div>
-            <div class="pagination-controls" style="display: flex; gap: 0.5rem; align-items: center;">
-                <select id="page-size" class="form-select" style="width: auto;">
-                    <option value="20">20件 / ページ</option>
-                    <option value="50">50件 / ページ</option>
-                    <option value="100">100件 / ページ</option>
+            <div class="pagination-controls-compact">
+                <select id="page-size" class="form-select form-select-sm">
+                    <option value="30">30件</option>
+                    <option value="50">50件</option>
+                    <option value="100">100件</option>
                 </select>
-                <button id="prev-page" class="btn btn-secondary" disabled>前へ</button>
-                <span style="margin: 0 0.5rem;">
-                    Page <input type="number" id="current-page-input" value="1" min="1"
-                        style="width: 50px; text-align: center;"> / <span id="total-pages">1</span>
+                <button id="prev-page" class="btn btn-sm btn-secondary" disabled>◀</button>
+                <span class="page-indicator">
+                    <input type="number" id="current-page-input" value="1" min="1"> / <span id="total-pages">1</span>
                 </span>
-                <button id="next-page" class="btn btn-secondary" disabled>次へ</button>
+                <button id="next-page" class="btn btn-sm btn-secondary" disabled>▶</button>
             </div>
         </div>
     </div>
