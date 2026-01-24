@@ -518,7 +518,6 @@ body {
     border-spacing: 0;
     font-size: var(--font-size-sm);
     border-radius: var(--border-radius);
-    overflow: hidden;
 }
 
 .data-table thead {
@@ -988,7 +987,6 @@ body {
 
 .data-table {
     width: 100%;
-    border-collapse: collapse;
 }
 
 .data-table th,
@@ -999,7 +997,6 @@ body {
 }
 
 .data-table th {
-    background: var(--bg-background);
     color: var(--text-secondary);
     font-weight: 500;
 }

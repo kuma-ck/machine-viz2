@@ -46,7 +46,7 @@
 
     .summary-grid {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: 1rem;
     }
 
@@ -199,31 +199,18 @@
         <div class="summary-grid">
             <div class="summary-card">
                 <div class="summary-icon">
-                    <i data-lucide="cpu"></i>
+                    <i data-lucide="calendar"></i>
                 </div>
-                <div class="summary-value">50</div>
-                <div class="summary-label">登録機番</div>
+                <div class="summary-value">{{ stats.last_updated }}</div>
+                <div class="summary-label">データの最終更新日</div>
             </div>
             <div class="summary-card">
                 <div class="summary-icon">
                     <i data-lucide="alert-triangle"></i>
                 </div>
-                <div class="summary-value">12</div>
-                <div class="summary-label">要注意アラート</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-icon">
-                    <i data-lucide="activity"></i>
-                </div>
-                <div class="summary-value">156</div>
-                <div class="summary-label">今月の検知</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-icon">
-                    <i data-lucide="check-circle"></i>
-                </div>
-                <div class="summary-value">98%</div>
-                <div class="summary-label">稼働率</div>
+                <div class="summary-value" style="color: var(--danger-color, #ef4444);">{{ stats.recent_alerts }} <span
+                        style="font-size: 1rem; color: var(--text-secondary);">件</span></div>
+                <div class="summary-label">パトロール結果 直近1週間の警告あり</div>
             </div>
         </div>
     </div>

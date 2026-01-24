@@ -540,3 +540,30 @@ async def get_manufacturing_distribution(
         "defect_counts": defect_counts,
         "total_counts": total_counts,
     }
+
+
+async def get_dashboard_stats(db: AsyncSession) -> Dict[str, Any]:
+    """ダッシュボード用統計情報を取得"""
+    
+    # 最終更新日 (パトロール結果の最新日)
+    last_updated_stmt = select(func.max(PatrolResult.patrol_date))
+    last_updated_result = await db.execute(last_updated_stmt)
+    last_updated = last_updated_result.scalar()
+    
+    # 直近1週間の警告数
+    today = date.today()
+    week_ago = today - timedelta(days=7)
+    
+    alert_stmt = (
+        select(func.count(PatrolResult.id))
+        .where(PatrolResult.patrol_date >= week_ago)
+        .where(PatrolResult.patrol_date <= today)
+        .where(PatrolResult.alert_flag == True)
+    )
+    alert_result = await db.execute(alert_stmt)
+    alert_count = alert_result.scalar_one()
+    
+    return {
+        "last_updated": last_updated.isoformat() if last_updated else "-",
+        "recent_alerts": alert_count
+    }
