@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}断面データ表示 - Mona{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+<style>
+    /* 追加の固有スタイルがあればここに記述 */
+    .filter-row-secondary {
+        /* display: flex; Toggled by JS */
+        gap: 1rem;
+        padding-top: 1rem;
+        margin-top: 1rem;
+        border-top: 1px dashed var(--border-color);
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .tabs {
+        display: flex;
+        gap: 0.5rem;
+        background: var(--bg-secondary);
+        padding: 4px;
+        border-radius: var(--radius-md);
+    }
+
+    .tab {
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        border-radius: var(--radius-sm);
+        transition: all 0.2s;
+    }
+
+    .tab:hover {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.5);
+    }
+
+    .tab.active {
+        color: var(--primary-color);
+        background: white;
+        box-shadow: var(--shadow-sm);
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="filter-bar">
+    <div class="filter-row-primary">
+        <div class="filter-group">
+            <label>シリーズ</label>
+            <select id="series-select" class="form-select form-select-sm">
+                <option value="A">Series A</option>
+                <option value="B">Series B</option>
+                <option value="C">Series C</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>対象期間 (開始)</label>
+            <input type="date" id="start-date" class="form-input">
+        </div>
+        <div class="filter-group">
+            <label>対象期間 (終了)</label>
+            <input type="date" id="end-date" class="form-input">
+        </div>
+
+        <div class="filter-group">
+            <label>カテゴリー</label>
+            <select id="category-select" class="form-select form-select-sm">
+                {% for cat in categories %}
+                <option value="{{ cat }}">{{ cat }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>特性値</label>
+            <select id="characteristic-select" class="form-select form-select-sm" disabled>
+                <option value="">選択してください</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>集計方法</label>
+            <select id="aggregation-method" class="form-select form-select-sm">
+                <option value="latest">最新値</option>
+                <option value="average">平均値</option>
+                <option value="max">最大値</option>
+                <option value="min">最小値</option>
+                <option value="sum">合計値</option>
+            </select>
+        </div>
+
+        <button id="search-btn" class="btn btn-sm btn-primary">
+            <i data-lucide="refresh-cw"
+                style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i> 更新
+        </button>
+        <button id="reset-btn" class="btn btn-sm btn-secondary">リセット</button>
+    </div>
+
+    <!-- Scatter Plot Secondary Filter Row -->
+    <div id="scatter-settings" class="filter-row-secondary" style="display: none;">
+        <div style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); white-space: nowrap;">
+            <i data-lucide="arrow-down-right" style="width: 14px; height: 14px;"></i> Y軸 (比較対象)
+        </div>
+
+        <div class="filter-group">
+            <label>カテゴリー</label>
+            <select id="category-select-y" class="form-select form-select-sm">
+                {% for cat in categories %}
+                <option value="{{ cat }}">{{ cat }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>特性値</label>
+            <select id="characteristic-select-y" class="form-select form-select-sm" disabled>
+                <option value="">選択してください</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="main-area-stacked">
+    <!-- Chart Section -->
+    <div class="chart-area"
+        style="height: 500px; margin-bottom: var(--spacing-md); display: flex; flex-direction: column;">
+        <div class="chart-header">
+            <div class="tabs">
+                <div class="tab active" data-tab="histogram">ヒストグラム</div>
+                <div class="tab" data-tab="scatter">散布図</div>
+                <div class="tab" data-tab="boxplot">箱ひげ図</div>
+            </div>
+
+            <!-- Histogram options -->
+            <div id="hist-options" style="font-size: 0.85rem; display: flex; gap: 15px; align-items: center;">
+                <div
+                    style="display: flex; gap: 10px; align-items: center; border-right: 1px solid #ddd; padding-right: 10px;">
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <input type="radio" name="bin-mode" value="count" checked> ビン数
+                    </label>
+                    <input type="number" id="bin-count" class="form-input" value="20" min="5" max="100"
+                        style="width: 60px; padding: 2px 4px; font-size: 0.85rem;">
+
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; margin-left: 5px;">
+                        <input type="radio" name="bin-mode" value="width"> ビン幅
+                    </label>
+                    <input type="number" id="bin-width" class="form-input" placeholder="例: 10" step="any"
+                        style="width: 70px; padding: 2px 4px; font-size: 0.85rem; display: none;">
+                </div>
+                <label><input type="checkbox" id="relative-freq"> 相対度数で表示</label>
+            </div>
+        </div>
+
+        <div id="cross-section-chart" style="flex: 1; width: 100%; min-height: 0;"></div>
+    </div>
+
+    <!-- Detail Table Section -->
+    <div class="search-results">
+        <div class="results-header"
+            style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem;">
+            <h3>詳細データ <span id="data-count"
+                    style="font-weight: normal; font-size: 0.9rem; color: var(--text-secondary); margin-left: 8px;"></span>
+            </h3>
+            <button id="download-csv-btn" class="btn btn-sm btn-outline">
+                <i data-lucide="download" style="width: 14px; height: 14px; margin-right: 4px;"></i> CSV
+            </button>
+        </div>
+
+        <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+            <table class="data-table compact">
+                <thead>
+                    <tr>
+                        <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">機番</th>
+                        <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">シリーズ</th>
+                        <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">機種</th>
+                        <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">値 (X)</th>
+                        <th class="col-y"
+                            style="position: sticky; top: 0; background: #f8fafc; z-index: 10; display: none;">値 (Y)
+                        </th>
+                        <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="detail-table-body">
+                    <!-- JS renders here -->
+                </tbody>
+            </table>
+        </div>
+        <!-- Pagination Controls -->
+        <div id="pagination-controls"
+            style="display: flex; justify-content: flex-end; align-items: center; padding-top: 10px; gap: 10px;">
+            <span id="page-info" style="font-size: 0.85rem; color: var(--text-secondary);"></span>
+            <div class="btn-group">
+                <button id="prev-page-btn" class="btn btn-sm btn-outline" disabled>&lt; 前へ</button>
+                <button id="next-page-btn" class="btn btn-sm btn-outline" disabled>次へ &gt;</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/cross_section.js"></script>
+{% endblock %}

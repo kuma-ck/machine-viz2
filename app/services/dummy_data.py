@@ -1,8 +1,8 @@
 """ダミーデータ生成サービス"""
 import random
 from datetime import date, timedelta
-from typing import Optional
-
+from typing import Optional, List, Dict, Any
+import statistics
 
 # サンプルデータ定義
 MODEL_SERIES = ["A", "B", "C"]
@@ -191,8 +191,6 @@ def generate_dummy_characteristics(
                 
                 # 集計方法に応じた補正
                 if aggregation_method == "sum":
-                    # 月間合計（例: 稼働時間や電力量など、蓄積するものとして扱う場合）
-                    # 単純な特性値（温度など）の合計は意味がない場合が多いが、リクエスト通り実装
                     value_numeric = (base_value + rng.gauss(0, base_value * 0.1)) * 30 
                 elif aggregation_method == "max":
                     value_numeric = base_value + abs(rng.gauss(0, base_value * 0.2)) # 高めに振る
@@ -261,7 +259,6 @@ def generate_dummy_characteristics(
                 value_numeric = None
             else:
                 base_value = 50
-                # 使用回数が増えると値が変化する傾向
                 trend = usage_count / 1000000 * 10
                 value_numeric = base_value + trend + rng.gauss(0, 3)
                 value_text = None
@@ -393,18 +390,15 @@ def _generate_consistent_defect_data(
     if not available_models:
         available_models = ["Unknown"]
         
-    # 生成する不具合件数を決定（期間とモデル数に比例させる）
-    # 1モデルあたり月15件程度に増加（以前は5件）
+    # 生成する不具合件数を決定
     months = max(1, days_diff // 30)
     base_count = len(available_models) * months * 15
     count = rng.randint(int(base_count * 0.9), int(base_count * 1.1))
     
-    # 製造月の範囲（不具合発生日より前である必要がある）
-    
     for _ in range(count):
         defect_date = start_date + timedelta(days=rng.randint(0, days_diff))
         
-        # 製造月をランダムに決定（不具合発生より1ヶ月〜1.5年前に狭める）
+        # 製造月をランダムに決定
         manufacture_date = defect_date - timedelta(days=rng.randint(30, int(365 * 1.5)))
         manufacture_month = manufacture_date.replace(day=1).strftime("%Y-%m")
         
@@ -453,7 +447,7 @@ def get_defect_trend_data(
         
     for d in defects:
         defect_date = d["defect_date"]
-        # 範囲内の日付のみカウント（共通関数は範囲内のみ生成するはずだが念のため）
+        # 範囲内の日付のみカウント
         if defect_date in date_counts:
             date_counts[defect_date] += 1
             
@@ -492,7 +486,6 @@ def get_machines_matching_filter(
     # ソート
     reverse = (sort_order == "desc")
     # キーのマッピング (Frontend field name -> Dict key)
-    # machine_id, series, model, defect_date, defect_category
     key_map = {
         "machine_id": "machine_id",
         "series": "series",
@@ -528,7 +521,7 @@ def get_manufacturing_distribution(
     defect_code: str = "",
 ) -> dict:
     """製造月別分布データ（チャート用）を生成（一貫性版）"""
-    # 共通データ生成（これが「不具合発生台数」の母集団になる）
+    # 共通データ生成
     defects = _generate_consistent_defect_data(series, models, start_date, end_date)
     
     # フィルタリング
@@ -574,15 +567,13 @@ def get_manufacturing_distribution(
     defect_counts = []
     total_counts = []
     
-    # トータル台数生成用の乱数（ここは不具合データとは独立してよいが、シードは条件固定）
+    # トータル台数生成用の乱数
     rng = random.Random(f"{series}_{models}_total_counts")
     
     for month in months:
         d_count = defect_counts_by_month.get(month, 0)
         defect_counts.append(d_count)
         
-        # 全生産台数は、不具合数より多くなるようにそれっぽく生成
-        # 不具合率 0.1% ~ 5% 程度と仮定して逆算
         if d_count > 0:
             rate = rng.uniform(0.001, 0.05)
             total = int(d_count / rate)
@@ -637,7 +628,7 @@ def _generate_consistent_patrol_data(
         # 日付
         patrol_date = start_date + timedelta(days=rng.randint(0, days_diff))
         
-        # アラートフラグ（ランクAはアラート率高いとか）
+        # アラートフラグ
         is_alert = False
         if this_rank == "A":
             is_alert = rng.random() > 0.3
@@ -685,7 +676,7 @@ def get_patrol_results(
     # 共通データ生成
     results = _generate_consistent_patrol_data(rank, series, models, start_date, end_date)
     
-    # フィルタリング (rank, series, models は生成時に反映済みだが、他パラメータでフィルタ)
+    # フィルタリング
     if defect_category:
         results = [r for r in results if r["defect_category"] == defect_category]
     
@@ -708,19 +699,14 @@ def get_patrol_results(
         "machine_id": "machine_id",
         "defect_category": "defect_category",
         "defect_code": "defect_code",
-        "patrol_date": "patrol_date", # UIで「パトロール日」とするか「対象日」とするかによるが、specは「パトロール対象日」
+        "patrol_date": "patrol_date",
         "target_date": "target_date",
         "defect_count": "defect_count",
         "logic_content": "logic_content",
         "alert_flag": "alert_flag",
     }
     
-    # specでは「パトロール対象日」なので target_date をデフォルトにすべきか？
-    # sort_fieldが "patrol_date" で来たら target_date を使う仕様にするなど調整
-    # ここでは単純にマッピング。UIからは "target_date" を送る想定にする。
-    
     sort_key = key_map.get(sort_field, "target_date")
-    
     results.sort(key=lambda x: str(x.get(sort_key, "")), reverse=reverse)
     
     # ページネーション
@@ -735,5 +721,278 @@ def get_patrol_results(
         "total": total_count,
         "page": page,
         "page_size": page_size,
+    }
+
+# ==========================================
+# Cross-sectional Data (Histogram/Scatter/Boxplot)
+# ==========================================
+
+def _generate_raw_values(
+    series: str,
+    models: list[str],
+    start_date: date,
+    end_date: date,
+    category: str,
+    characteristic_id: str,
+    aggregation_method: str = "latest",
+) -> List[Dict[str, Any]]:
+    """断面データ用の生データを一括生成"""
+    seed_str = f"{series}_{models}_{start_date}_{end_date}_{category}_{characteristic_id}_{aggregation_method}_cross"
+    rng = random.Random(seed_str)
+    
+    # 機種リスト
+    available_models = models if models else MODEL_NUMBERS.get(series, ["Unknown"])
+    
+    # 機台数を生成（シリーズ・機種によって変える）
+    # 例: 100〜500台
+    count = rng.randint(100, 500)
+    
+    results = []
+    
+    # 値の基準を作成
+    base_mean = 50
+    base_std = 10
+    
+    # 特性IDによって基準を変える
+    if characteristic_id == "温度": base_mean, base_std = 25, 5
+    elif characteristic_id == "湿度": base_mean, base_std = 50, 15
+    elif characteristic_id == "圧力": base_mean, base_std = 100, 10
+    elif characteristic_id == "振動": base_mean, base_std = 0.5, 0.2
+    
+    for _ in range(count):
+        model = rng.choice(available_models)
+        machine_id = f"{series}-{model}-{rng.randint(1000, 9999)}"
+        
+        # モデルごとの個体差を加える
+        model_bias = available_models.index(model) * (base_std * 0.5)
+        
+        val = rng.gauss(base_mean + model_bias, base_std)
+        # 異常値の混入 (1%確率)
+        if rng.random() < 0.01:
+            val += rng.choice([-1, 1]) * base_std * 3
+            
+        results.append({
+            "machine_id": machine_id,
+            "series": series,
+            "model": model,
+            "value": round(val, 2)
+        })
+        
+    return results
+
+
+def get_cross_section_histogram(
+    series: str,
+    models: list[str],
+    start_date: date,
+    end_date: date,
+    category: str,
+    characteristic_id: str,
+    aggregation_method: str = "latest",
+    bin_width: Optional[float] = None,
+    bins_count: int = 20
+) -> Dict[str, Any]:
+    """ヒストグラム用データを取得"""
+    raw_data = _generate_raw_values(series, models, start_date, end_date, category, characteristic_id, aggregation_method)
+    
+    values = [d["value"] for d in raw_data]
+    if not values:
+        return {"bins": [], "counts": [], "machine_ids": [], "raw_data": []}
+        
+    min_val = min(values)
+    max_val = max(values)
+    
+    bins = [] # range labels
+    counts = []
+    machine_ids = [] # list of lists
+
+    if bin_width:
+        # Bin Width Mode
+        import math
+        # Start from a nice number below min_val if possible? 
+        # For simplicity, start from floor(min_val) or just min_val
+        # Let's align to 0 if relevant? 
+        # Simple approach: start at floor(min_val)
+        start = math.floor(min_val)
+        
+        current_lower = start
+        # Limit loop to avoid infinite in case of bad input
+        max_bins = 100 
+        loop_count = 0
+        
+        # Determine upper bound to cover max_val
+        # We need to cover up to max_val + margin maybe?
+        # Just cover max_val
+        
+        while current_lower < max_val + (bin_width * 0.1): # Ensure coverage
+            upper = current_lower + bin_width
+            bins.append(f"{current_lower:.2f} - {upper:.2f}")
+            
+            # Count
+            in_bin = [d for d in raw_data if current_lower <= d["value"] < upper]
+            # Verify closure for last element? 
+            # With bin width, strictly [lower, upper) is usually fine, but max value edge case needs care.
+            # If d["value"] == upper and it's the max... usually it goes to next bin.
+            # Let's stick to < upper.
+            
+            counts.append(len(in_bin))
+            machine_ids.append([d["machine_id"] for d in in_bin])
+            
+            current_lower = upper
+            loop_count += 1
+            if loop_count > max_bins: break
+
+    else:
+        # Bin Count Mode (Existing logic)
+        # 範囲を少し広げる
+        margin = (max_val - min_val) * 0.05
+        if margin == 0: margin = 1
+        min_val -= margin
+        max_val += margin
+        
+        bins_count = bins_count or 20 # Fallback
+        step = (max_val - min_val) / bins_count
+        
+        for i in range(bins_count):
+            lower = min_val + step * i
+            upper = min_val + step * (i + 1)
+            bins.append(f"{lower:.2f} - {upper:.2f}")
+            
+            in_bin = [d for d in raw_data if lower <= d["value"] < upper]
+            # 最後のビンは閉区間
+            if i == bins_count - 1:
+                in_bin = [d for d in raw_data if lower <= d["value"] <= upper]
+                
+            counts.append(len(in_bin))
+            machine_ids.append([d["machine_id"] for d in in_bin])
+        
+    return {
+        "bins": bins,
+        "counts": counts,
+        "machine_ids": machine_ids, # フロントでクリック時にリスト表示するためのIDリスト
+        "raw_data_sample": raw_data[:10], # デバッグ用
+        "raw_data": raw_data  # 全データ
+    }
+
+
+def get_cross_section_scatter(
+    series: str,
+    models: list[str],
+    start_date: date,
+    end_date: date,
+    category_x: str,
+    id_x: str,
+    agg_x: str,
+    category_y: str,
+    id_y: str,
+    agg_y: str,
+) -> Dict[str, Any]:
+    """散布図用データを取得"""
+    # XとYで別々のデータを生成するが、Machine IDは一致させる必要がある
+    # そのため、まずMachine IDのリストを確定させ、そのIDに対して値を生成するロジックが必要
+    # しかし _generate_raw_values はランダムにIDを生成しているため、一致しない可能性がある
+    
+    # 解決策: Machine ID生成ロジックを分離するか、ここで一括生成する
+    
+    seed_str = f"{series}_{models}_{start_date}_{end_date}_scatter_ids"
+    rng = random.Random(seed_str)
+    
+    available_models = models if models else MODEL_NUMBERS.get(series, ["Unknown"])
+    count = rng.randint(100, 500)
+    
+    data = []
+    
+    # X軸の設定
+    base_mean_x = 50; base_std_x = 10
+    if id_x == "温度": base_mean_x, base_std_x = 25, 5
+    elif id_x == "圧力": base_mean_x, base_std_x = 100, 10
+    
+    # Y軸の設定
+    base_mean_y = 50; base_std_y = 10
+    if id_y == "温度": base_mean_y, base_std_y = 25, 5
+    elif id_y == "圧力": base_mean_y, base_std_y = 100, 10
+    
+    # 相関係数を適当に設定 (-1.0 ~ 1.0)
+    # シードに基づいて固定
+    correlation = rng.uniform(-0.8, 0.8)
+    
+    for _ in range(count):
+        model = rng.choice(available_models)
+        machine_id = f"{series}-{model}-{rng.randint(1000, 9999)}"
+        
+        # X値生成
+        val_x = rng.gauss(base_mean_x, base_std_x)
+        
+        # Y値生成 (相関を持たせる)
+        # y = correlation * x + noise
+        # 正規化してから相関適用して戻す簡易ロジック
+        norm_x = (val_x - base_mean_x) / base_std_x
+        norm_y = correlation * norm_x + rng.gauss(0, (1 - abs(correlation)**2)**0.5)
+        val_y = norm_y * base_std_y + base_mean_y
+        
+        data.append({
+            "machine_id": machine_id,
+            "x": round(val_x, 2),
+            "y": round(val_y, 2),
+            "model": model
+        })
+        
+    return {"data": data, "correlation": round(correlation, 3)}
+
+
+def get_cross_section_boxplot(
+    series: str,
+    models: list[str],
+    start_date: date,
+    end_date: date,
+    category: str,
+    characteristic_id: str,
+    aggregation_method: str = "latest",
+    bins_count: int = 20,
+    bin_width: Optional[float] = None
+) -> Dict[str, Any]:
+    """箱ひげ図用データを取得"""
+    raw_data = _generate_raw_values(series, models, start_date, end_date, category, characteristic_id, aggregation_method)
+    
+    # 機種ごとにグループ化
+    grouped = {}
+    for d in raw_data:
+        m = d["model"]
+        if m not in grouped: grouped[m] = []
+        grouped[m].append(d["value"])
+        
+    # 各グループの統計量を計算
+    boxplot_data = []
+    axis_data = [] # モデル名
+    
+    for model in sorted(grouped.keys()):
+        vals = sorted(grouped[model])
+        if not vals: continue
+        
+        # Boxplot data: [min, Q1, median, Q3, max]
+        q1 = statistics.quantiles(vals, n=4)[0]
+        median = statistics.median(vals)
+        q3 = statistics.quantiles(vals, n=4)[2]
+        iqr = q3 - q1
+        
+        lower_fence = q1 - 1.5 * iqr
+        upper_fence = q3 + 1.5 * iqr
+        
+        # Outliers filtering for whiskers
+        non_outliers = [v for v in vals if lower_fence <= v <= upper_fence]
+        if not non_outliers:
+             min_val, max_val = min(vals), max(vals)
+        else:
+             min_val, max_val = min(non_outliers), max(non_outliers)
+             
+        # ECharts boxplot format
+        boxplot_data.append([min_val, q1, median, q3, max_val])
+        axis_data.append(model)
+        
+    return {
+        "axis_data": axis_data,
+        "box_data": boxplot_data,
+        "outliers": [], # 簡易化のため省略
+        "raw_data": raw_data
     }
 

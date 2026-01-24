@@ -29,6 +29,10 @@
                 class="navbar-item {% if request.url.path.startswith('/defect-trend') %}active{% endif %}">
                 <i data-lucide="trending-up"></i> 不具合傾向
             </a>
+            <a href="/cross-section"
+                class="navbar-item {% if request.url.path.startswith('/cross-section') %}active{% endif %}">
+                <i data-lucide="bar-chart-2"></i> 断面データ
+            </a>
             <a href="/search" class="navbar-item {% if request.url.path.startswith('/search') %}active{% endif %}">
                 <i data-lucide="search"></i> 機番検索
             </a>
@@ -41,9 +45,13 @@
             </a>
         </div>
         <div class="navbar-end">
+            <!-- Theme Toggle -->
+            <button id="theme-toggle" class="btn btn-sm btn-outline"
+                style="margin-right: 0.5rem; width: 32px; padding: 0;">
+                <i data-lucide="moon" style="width: 16px; height: 16px;"></i>
+            </button>
             <form action="/logout" method="post" style="margin: 0;">
-                <button type="submit" class="btn btn-sm btn-outline"
-                    style="border: 1px solid var(--border-color); color: var(--text-secondary);">
+                <button type="submit" class="btn btn-sm btn-outline btn-logout">
                     <i data-lucide="log-out" style="width: 14px; height: 14px; margin-right: 4px;"></i> ログアウト
                 </button>
             </form>

@@ -46,3 +46,42 @@ function showToast(message, type = 'info') {
         }, 300);
     }, 4000);
 }
+
+/**
+ * Theme Toggle Logic
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Check local storage
+    const currentTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', currentTheme);
+
+    // 2. Set button icon state
+    updateThemeIcon(currentTheme);
+
+    // 3. Bind click event
+    const themeBtn = document.getElementById('theme-toggle');
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            const target = current === 'dark' ? 'light' : 'dark';
+
+            document.documentElement.setAttribute('data-theme', target);
+            localStorage.setItem('theme', target);
+            updateThemeIcon(target);
+        });
+    }
+});
+
+function updateThemeIcon(theme) {
+    const btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+
+    // Lucide replaces the <i> tag with an <svg> tag.
+    // We should just reset the innerHTML to a new <i> tag and re-run createIcons.
+    if (theme === 'dark') {
+        btn.innerHTML = '<i data-lucide="sun" style="width: 16px; height: 16px;"></i>';
+    } else {
+        btn.innerHTML = '<i data-lucide="moon" style="width: 16px; height: 16px;"></i>';
+    }
+    lucide.createIcons();
+}
