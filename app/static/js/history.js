@@ -336,7 +336,7 @@ async function loadData() {
     const machineNumber = input?.value.trim();
 
     if (!machineNumber) {
-        alert('機番を入力してください');
+        showToast('機番を入力してください', 'warning');
         return;
     }
 
@@ -378,7 +378,7 @@ async function loadData() {
 
     } catch (error) {
         console.error('データ読み込みエラー:', error);
-        alert('データの読み込みに失敗しました');
+        showToast('データの読み込みに失敗しました', 'error');
     } finally {
         showLoading(false);
     }
