@@ -34,6 +34,26 @@ async def main():
         if machines:
             print(f"First machine: {machines[0]}")
             
+        # Test Characteristics Aggregation (REAL DB)
+        print("\nTesting get_characteristics (aggregation='average')...")
+        # Find a machine and char ID that exists
+        # Assuming DB has some data. Using one from previous search result or hardcoded if known.
+        target_machine = machines[0]["machine_id"] if machines else "A-A100-1234" # Fallback
+        
+        chars = await crud.get_characteristics(
+            session,
+            machine_number=target_machine,
+            category="センサー",
+            characteristic_id="温度",
+            x_axis_type="monthly",
+            aggregation_method="average"
+        )
+        print(f"Characteristics: {len(chars)} items found.")
+        if chars:
+            print(f"First item: {chars[0]}")
+        else:
+            print("No characteristics found (might need data population).")
+            
     print("\nVerification complete.")
 
 if __name__ == "__main__":

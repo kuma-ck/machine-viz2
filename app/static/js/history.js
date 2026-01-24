@@ -459,17 +459,7 @@ async function loadCharacteristics() {
             x_axis_type: state.xAxisType,
             category: s.category,
             characteristic_id: s.characteristicId,
-            // aggregation: s.aggregationMethod // APIが対応しているか確認必要だが、とりあえずパラメータに含める
-            // 現状のAPI定義には aggregation はないかも？仕様にはある
-            // もしAPIになければクライアント側で処理か、API更新必要
-            // history.pyを確認すると aggregation 引数はない。
-            // しかし現状の実装でも aggregation-method ドロップダウンはある。
-            // これまではパラメータとして送っていなかった（Step 214参照）。
-            // なので、ここではパラメータに含めない、あるいは無視される。
-            // 仕様では「集計方法を選択」とある。
-            // データがDaily/Monthlyの場合、すでに集計済み値が返る。
-            // APIがAggregationに対応していないなら、追加するか、一旦無視。
-            // ここでは無視して従来のパラメータのみ送る。
+            aggregation_method: s.aggregationMethod
         });
 
         if (state.startDate) {

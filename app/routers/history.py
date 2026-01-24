@@ -68,12 +68,14 @@ async def get_characteristics(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     x_axis_type: str = Query(default="monthly", regex="^(monthly|daily|usage)$"),
+    aggregation_method: str = Query(default="latest", regex="^(average|max|min|sum|latest)$"),
     db: AsyncSession = Depends(get_db)
 ):
     """特性値を取得"""
+    start = date.fromisoformat(start_date) if start_date else None
+    end = date.fromisoformat(end_date) if end_date else None
+
     if settings.USE_DUMMY_DATA:
-        start = date.fromisoformat(start_date) if start_date else None
-        end = date.fromisoformat(end_date) if end_date else None
         values = dummy_data.generate_dummy_characteristics(
             machine_number=machine_number,
             category=category,
@@ -81,11 +83,9 @@ async def get_characteristics(
             start_date=start,
             end_date=end,
             x_axis_type=x_axis_type,
+            aggregation_method=aggregation_method,
         )
         return {"values": values}
-    
-    start = date.fromisoformat(start_date) if start_date else None
-    end = date.fromisoformat(end_date) if end_date else None
     
     values = await crud.get_characteristics(
         db,
@@ -95,6 +95,7 @@ async def get_characteristics(
         start_date=start,
         end_date=end,
         x_axis_type=x_axis_type,
+        aggregation_method=aggregation_method,
     )
     return {"values": values}
 

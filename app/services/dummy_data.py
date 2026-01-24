@@ -122,10 +122,11 @@ def generate_dummy_characteristics(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     x_axis_type: str = "monthly",
+    aggregation_method: str = "latest",
 ) -> list[dict]:
     """ダミー特性値を生成"""
     # シード値を設定して再現性を確保
-    seed_str = f"{machine_number}_{category}_{characteristic_id}_{x_axis_type}"
+    seed_str = f"{machine_number}_{category}_{characteristic_id}_{x_axis_type}_{aggregation_method}"
     rng = random.Random(seed_str)
 
     if start_date is None:
@@ -177,7 +178,20 @@ def generate_dummy_characteristics(
                     "電流": 10,
                     "消費電力": 500,
                 }.get(characteristic_id, 50)
-                value_numeric = base_value + rng.gauss(0, base_value * 0.1)
+                
+                # 集計方法に応じた補正
+                if aggregation_method == "sum":
+                    # 月間合計（例: 稼働時間や電力量など、蓄積するものとして扱う場合）
+                    # 単純な特性値（温度など）の合計は意味がない場合が多いが、リクエスト通り実装
+                    value_numeric = (base_value + rng.gauss(0, base_value * 0.1)) * 30 
+                elif aggregation_method == "max":
+                    value_numeric = base_value + abs(rng.gauss(0, base_value * 0.2)) # 高めに振る
+                elif aggregation_method == "min":
+                    value_numeric = base_value - abs(rng.gauss(0, base_value * 0.2)) # 低めに振る
+                else: 
+                    # average / latest
+                    value_numeric = base_value + rng.gauss(0, base_value * 0.1)
+
                 value_text = None
             
             values.append({
@@ -185,7 +199,7 @@ def generate_dummy_characteristics(
                 "record_date": current.isoformat(),
                 "category": category,
                 "characteristic_id": characteristic_id,
-                "value_numeric": round(value_numeric, 2) if value_numeric else None,
+                "value_numeric": round(value_numeric, 2) if value_numeric is not None else None,
                 "value_text": value_text,
                 "usage_count": usage_count,
             })

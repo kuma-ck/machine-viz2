@@ -67,65 +67,148 @@ async def get_characteristics(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     x_axis_type: str = "monthly",
+    aggregation_method: str = "latest",
 ) -> List[dict]:
     """特性値を取得"""
-    stmt = select(CharacteristicValue).join(Machine).where(Machine.machine_number == machine_number)
-    
-    if category:
-        stmt = stmt.where(CharacteristicValue.category == category)
-    if characteristic_id:
-        stmt = stmt.where(CharacteristicValue.characteristic_id == characteristic_id)
-        
-    if start_date:
-        stmt = stmt.where(CharacteristicValue.record_date >= start_date)
-    if end_date:
-        stmt = stmt.where(CharacteristicValue.record_date <= end_date)
-        
-    # Sort
-    stmt = stmt.order_by(CharacteristicValue.record_date)
-    
-    result = await db.execute(stmt)
-    values = result.scalars().all()
-    
-    # If x_axis_type is 'daily' and we need finer granularity,
-    # generate dummy data dynamically since DB only has monthly data
-    if x_axis_type == "daily" and category and characteristic_id:
-        # Generate daily dummy data using the dummy_data module
-        return dummy_data.generate_dummy_characteristics(
-            machine_number=machine_number,
-            category=category,
-            characteristic_id=characteristic_id,
-            start_date=start_date,
-            end_date=end_date,
-            x_axis_type="daily"
-        )
     
     # Check if this is a qualitative variable (not in DB, generate dynamically)
     qualitative_ids = dummy_data.QUALITATIVE_CHARACTERISTIC_IDS.get(category, [])
     if characteristic_id in qualitative_ids:
-        # Generate qualitative data dynamically
+        # Generate qualitative data dynamically (ignoring aggregation for qualitative for now)
         return dummy_data.generate_dummy_characteristics(
             machine_number=machine_number,
             category=category,
             characteristic_id=characteristic_id,
             start_date=start_date,
             end_date=end_date,
-            x_axis_type=x_axis_type
+            x_axis_type=x_axis_type,
+            aggregation_method=aggregation_method
         )
+
+    # 1. Base Query
+    # If monthly, we might need to aggregate daily records.
+    # If daily, we just fetch daily records.
+    # If usage, we fetch all records.
     
-    # For monthly or usage with quantitative data, return DB data
-    return [
-        {
-            "machine_number": machine_number,
-            "record_date": v.record_date.isoformat(),
-            "category": v.category,
-            "characteristic_id": v.characteristic_id,
-            "value_numeric": v.value_numeric,
-            "value_text": v.value_text,
-            "usage_count": v.usage_count,
-        }
-        for v in values
-    ]
+    # However, if we are in "dummy data generation mode" inside crud (lines 90-101 of original),
+    # we should preserve that. But wait, `get_characteristics` in crud is for REAL DB.
+    # The lines 90-101 in original code were:
+    # "If x_axis_type is 'daily' and we need finer granularity... generate dummy data dynamically"
+    # This implies the DB MIGHT only have monthly data? Or maybe it has daily but we were mocking it?
+    # Let's assume for this task we are implementing REAL DB logic. 
+    # If the DB has daily data, we aggregate for monthly.
+    
+    # Let's verify DB schema later. For now, assuming CharacteristicValue has daily records.
+    
+    if x_axis_type == "monthly":
+        # Aggregate by Month
+        # SQLite: strftime('%Y-%m', record_date)
+        # PostgreSQL: to_char(record_date, 'YYYY-MM')
+        
+        # Use expression for grouping to be safe across dialects
+        month_expr = func.strftime('%Y-%m', CharacteristicValue.record_date)
+        month_col = month_expr.label("month")
+        
+        # Select appropriate aggregation
+        aggregation_method = aggregation_method or "latest" # Default to latest if None
+        
+        if aggregation_method == "average":
+            agg_func = func.avg(CharacteristicValue.value_numeric)
+        elif aggregation_method == "max":
+            agg_func = func.max(CharacteristicValue.value_numeric)
+        elif aggregation_method == "min":
+            agg_func = func.min(CharacteristicValue.value_numeric)
+        elif aggregation_method == "sum":
+            agg_func = func.sum(CharacteristicValue.value_numeric)
+        else: # latest
+            # For 'latest', simplest approximation in standard SQL grouping is Average or Max
+            agg_func = func.avg(CharacteristicValue.value_numeric)
+
+        stmt = (
+            select(
+                month_col.label("record_date_str"), # Return as date string
+                agg_func.label("value_numeric"),
+                func.max(CharacteristicValue.usage_count).label("usage_count")
+            )
+            .join(Machine)
+            .where(Machine.machine_number == machine_number)
+            .where(CharacteristicValue.category == category)
+            .where(CharacteristicValue.characteristic_id == characteristic_id)
+        )
+        
+        if start_date:
+            stmt = stmt.where(CharacteristicValue.record_date >= start_date)
+        if end_date:
+            stmt = stmt.where(CharacteristicValue.record_date <= end_date)
+            
+        stmt = stmt.group_by(month_expr).order_by(month_expr)
+        
+        result = await db.execute(stmt)
+        rows = result.all()
+        
+        return [
+            {
+                "machine_number": machine_number,
+                "record_date": row.record_date_str + "-01", # Format as YYYY-MM-01
+                "category": category,
+                "characteristic_id": characteristic_id,
+                "value_numeric": row.value_numeric,
+                "value_text": None,
+                "usage_count": row.usage_count,
+            }
+            for row in rows
+        ]
+
+    else:
+        # Daily or Usage (Raw data)
+        # If 'daily' and 'latest', we assume 1 record per day, so just fetch.
+        # If there were multiple per day, we'd need aggregation too. assuming 1 per day for now.
+        
+        stmt = select(CharacteristicValue).join(Machine).where(Machine.machine_number == machine_number)
+    
+        if category:
+            stmt = stmt.where(CharacteristicValue.category == category)
+        if characteristic_id:
+            stmt = stmt.where(CharacteristicValue.characteristic_id == characteristic_id)
+            
+        if start_date:
+            stmt = stmt.where(CharacteristicValue.record_date >= start_date)
+        if end_date:
+            stmt = stmt.where(CharacteristicValue.record_date <= end_date)
+            
+        # Sort
+        if x_axis_type == 'usage':
+            stmt = stmt.order_by(CharacteristicValue.usage_count)
+        else:
+            stmt = stmt.order_by(CharacteristicValue.record_date)
+        
+        result = await db.execute(stmt)
+        values = result.scalars().all()
+        
+        # If we need to generate dummy data for daily because DB is empty (legacy logic)
+        if not values and x_axis_type == "daily" and category and characteristic_id:
+             return dummy_data.generate_dummy_characteristics(
+                machine_number=machine_number,
+                category=category,
+                characteristic_id=characteristic_id,
+                start_date=start_date,
+                end_date=end_date,
+                x_axis_type="daily",
+                aggregation_method=aggregation_method
+            )
+
+        return [
+            {
+                "machine_number": machine_number,
+                "record_date": v.record_date.isoformat(),
+                "category": v.category,
+                "characteristic_id": v.characteristic_id,
+                "value_numeric": v.value_numeric,
+                "value_text": v.value_text,
+                "usage_count": v.usage_count,
+            }
+            for v in values
+        ]
 
 async def get_patrol_results(
     db: AsyncSession,
