@@ -197,21 +197,23 @@
     <!-- サマリーカード -->
     <div class="summary-section">
         <div class="summary-grid">
-            <div class="summary-card">
+            <a href="/patrol/list?sort=patrol_date&order=desc" class="summary-card"
+                style="display: block; text-decoration: none; color: inherit;">
                 <div class="summary-icon">
                     <i data-lucide="calendar"></i>
                 </div>
                 <div class="summary-value">{{ stats.last_updated }}</div>
                 <div class="summary-label">データの最終更新日</div>
-            </div>
-            <div class="summary-card">
+            </a>
+            <a href="/patrol/list?alert=true&start={{ stats.alert_start_date }}&end={{ stats.alert_end_date }}"
+                class="summary-card" style="display: block; text-decoration: none; color: inherit;">
                 <div class="summary-icon">
                     <i data-lucide="alert-triangle"></i>
                 </div>
                 <div class="summary-value" style="color: var(--danger-color, #ef4444);">{{ stats.recent_alerts }} <span
                         style="font-size: 1rem; color: var(--text-secondary);">件</span></div>
                 <div class="summary-label">パトロール結果 直近1週間の警告あり</div>
-            </div>
+            </a>
         </div>
     </div>
 

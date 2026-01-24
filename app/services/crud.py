@@ -565,5 +565,7 @@ async def get_dashboard_stats(db: AsyncSession) -> Dict[str, Any]:
     
     return {
         "last_updated": last_updated.isoformat() if last_updated else "-",
-        "recent_alerts": alert_count
+        "recent_alerts": alert_count,
+        "alert_start_date": week_ago.isoformat(),
+        "alert_end_date": today.isoformat()
     }

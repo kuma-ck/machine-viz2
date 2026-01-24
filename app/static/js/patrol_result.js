@@ -21,12 +21,37 @@ function initFilters() {
     const seriesSelect = document.getElementById('series-select');
     seriesSelect.addEventListener('change', updateModelList);
 
-    // Date defaults: Last 30 days
+    // Date defaults: Last 30 days OR URL param
     const today = new Date();
     const start = new Date();
     start.setDate(today.getDate() - 30);
-    document.getElementById('start-date').valueAsDate = start;
-    document.getElementById('end-date').valueAsDate = today;
+
+    const params = new URLSearchParams(window.location.search);
+    const pStart = params.get('start');
+    const pEnd = params.get('end');
+    const pAlert = params.get('alert');
+    const pSort = params.get('sort');
+    const pOrder = params.get('order');
+
+    if (pStart) {
+        document.getElementById('start-date').value = pStart;
+    } else {
+        document.getElementById('start-date').valueAsDate = start;
+    }
+
+    if (pEnd) {
+        document.getElementById('end-date').value = pEnd;
+    } else {
+        document.getElementById('end-date').valueAsDate = today;
+    }
+
+    if (pAlert) {
+        const alertSelect = document.getElementById('alert-select');
+        if (alertSelect) alertSelect.value = pAlert;
+    }
+
+    if (pSort) state.sortField = pSort;
+    if (pOrder) state.sortOrder = pOrder;
 
     // Search Button
     document.getElementById('search-btn').addEventListener('click', () => {

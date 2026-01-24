@@ -61,9 +61,11 @@ async def root(request: Request, db: AsyncSession = Depends(get_db)):
             # エラー時はデフォルト値のまま
     else:
         # ダミーデータ
-        from datetime import date
+        from datetime import date, timedelta
         stats["last_updated"] = date.today().isoformat()
         stats["recent_alerts"] = 5
+        stats["alert_start_date"] = (date.today() - timedelta(days=7)).isoformat()
+        stats["alert_end_date"] = date.today().isoformat()
         
     return templates.TemplateResponse(
         "index.html",
