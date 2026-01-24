@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}ログイン - Mona{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: center; align-items: center; min-height: 60vh;">
+    <div class="login-card"
+        style="width: 100%; max-width: 400px; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid var(--border-color);">
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary);">Mona ログイン</h1>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">アカウント情報を入力してください</p>
+        </div>
+
+        {% if error %}
+        <div
+            style="background-color: #fee2e2; color: #ef4444; padding: 0.75rem; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.875rem; text-align: center;">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form action="/login" method="post">
+            <div class="form-group" style="margin-bottom: 1.25rem;">
+                <label
+                    style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; color: var(--text-primary);">ユーザー名</label>
+                <input type="text" name="username" class="form-input" required style="width: 100%;" autofocus>
+            </div>
+            <div class="form-group" style="margin-bottom: 2rem;">
+                <label
+                    style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; color: var(--text-primary);">パスワード</label>
+                <input type="password" name="password" class="form-input" required style="width: 100%;">
+            </div>
+            <button type="submit" class="btn btn-primary"
+                style="width: 100%; justify-content: center; padding: 0.75rem;">
+                ログイン
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

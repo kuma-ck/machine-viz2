@@ -20,6 +20,7 @@
         <div class="navbar-brand">
             <a href="/"><img src="/static/favicon.png" alt="Mona" class="brand-icon"> Mona</a>
         </div>
+        {% if request.cookies.get("access_token") and request.url.path != "/login" %}
         <div class="navbar-menu">
             <a href="/patrol/list" class="navbar-item {% if request.url.path.startswith('/patrol') %}active{% endif %}">
                 <i data-lucide="shield-check"></i> パトロール結果
@@ -39,11 +40,54 @@
                 <i data-lucide="database"></i> データカタログ
             </a>
         </div>
+        <div class="navbar-end">
+            <form action="/logout" method="post" style="margin: 0;">
+                <button type="submit" class="btn btn-sm btn-outline"
+                    style="border: 1px solid var(--border-color); color: var(--text-secondary);">
+                    <i data-lucide="log-out" style="width: 14px; height: 14px; margin-right: 4px;"></i> ログアウト
+                </button>
+            </form>
+        </div>
+        {% endif %}
     </nav>
 
     <main class="main-content">
         {% block content %}{% endblock %}
     </main>
+
+    <footer class="app-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <div class="footer-brand-logo">
+                    <img src="/static/favicon.png" alt="Mona">
+                    <span>Mona</span>
+                </div>
+                <p>
+                    機番データ、不具合情報、<br>
+                    パトロール結果を一元管理・分析する<br>
+                    統合プラットフォーム
+                </p>
+            </div>
+            <div class="footer-section">
+                <h4>Quick Links</h4>
+                <ul class="footer-links">
+                    <li><a href="/"><i data-lucide="home"></i> ホーム</a></li>
+                    <li><a href="/patrol/list"><i data-lucide="shield-check"></i> パトロール結果</a></li>
+                    <li><a href="/search"><i data-lucide="search"></i> 機番検索</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Support</h4>
+                <ul class="footer-links">
+                    <li><a href="/data-catalog"><i data-lucide="database"></i> データカタログ</a></li>
+                    <li><a href="mailto:admin@example.com"><i data-lucide="mail"></i> お問い合わせ</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            &copy; 2026 Mona Project. All rights reserved.
+        </div>
+    </footer>
 
     {% block scripts %}{% endblock %}
     <script>lucide.createIcons();</script>
