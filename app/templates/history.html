@@ -178,12 +178,22 @@
         <div class="table-section" id="events-section">
             <div class="table-header">
                 <h3>イベント情報</h3>
+                <div class="table-controls">
+                    <select id="event-type-filter" class="form-select form-select-sm" style="width: auto;">
+                        <option value="">全種別</option>
+                        <option value="FW更新">FW更新</option>
+                        <option value="部品交換">部品交換</option>
+                        <option value="メンテナンス">メンテナンス</option>
+                        <option value="不具合発生">不具合発生</option>
+                    </select>
+                </div>
             </div>
             <div class="table-scroll">
                 <table class="data-table compact">
                     <thead>
                         <tr>
-                            <th>日付</th>
+                            <th class="sortable" data-sort="event_date" style="cursor: pointer;">日付 <span
+                                    class="sort-icon"></span></th>
                             <th>種別</th>
                             <th>コード</th>
                             <th>説明</th>

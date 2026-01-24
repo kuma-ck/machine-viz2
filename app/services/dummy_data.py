@@ -41,7 +41,7 @@ QUALITATIVE_VALUES = {
 def generate_machine_number() -> str:
     """機番を生成"""
     prefix = random.choice(["MC", "DEV", "SYS"])
-    number = random.randint(10000, 99999)
+    number = random.randint(1000000, 9999999)
     return f"{prefix}-{number}"
 
 
@@ -73,25 +73,28 @@ def generate_dummy_machine(machine_number: Optional[str] = None) -> dict:
     }
 
 
-def generate_dummy_events(machine_number: str, count: int = 20) -> list[dict]:
+def generate_dummy_events(machine_number: str, count: int = 50) -> list[dict]:
     """ダミーイベント情報を生成"""
     events = []
     base_date = date(2021, 1, 1)
+    current_date = base_date
     current_fw = "1.0.0"
-    usage_count = 0
+    usage_count = 0 
+    max_events = 100
     
-    for i in range(count):
-        # イベント日付は月初に揃える（特性値の日付と一致させるため）
-        months_offset = i * 2 + random.randint(0, 2)
-        year = base_date.year + months_offset // 12
-        month = (base_date.month + months_offset % 12 - 1) % 12 + 1
-        if base_date.month + months_offset % 12 > 12:
-            year += 1
-        event_date = date(year, month, 1)
+    while current_date <= date.today() - timedelta(days=1) and len(events) < max_events:
+        # 次のイベント日までの間隔（1〜2ヶ月後）
+        # ランダムに日数を足す (30-90日)
+        days_delta = random.randint(20, 70) 
+        current_date += timedelta(days=days_delta)
         
-        # 範囲外は除外
-        if event_date > date(2024, 12, 31):
+        # 範囲外チェック
+        if current_date > date.today() - timedelta(days=1):
             break
+            
+        event_date = current_date
+        
+        # Type & Code Generation logic copies...
         
         event_type = random.choice(EVENT_TYPES)
         
@@ -100,12 +103,19 @@ def generate_dummy_events(machine_number: str, count: int = 20) -> list[dict]:
         
         usage_count += random.randint(1000, 10000)
         
+        # イベントコードとカテゴリの決定
+        event_code = None
+        event_category = None
+        if event_type == "不具合発生":
+             event_code = random.choice(DEFECT_CODES)
+             event_category = random.choice(EVENT_CATEGORIES)
+
         event = {
             "machine_number": machine_number,
             "event_date": event_date.isoformat(),
             "event_type": event_type,
-            "event_code": f"E{random.randint(100, 999)}" if event_type == "不具合発生" else None,
-            "event_category": random.choice(EVENT_CATEGORIES) if event_type == "不具合発生" else None,
+            "event_code": event_code,
+            "event_category": event_category,
             "description": f"{event_type}が発生しました。",
             "fw_version": current_fw,
             "usage_count": usage_count,
@@ -132,7 +142,7 @@ def generate_dummy_characteristics(
     if start_date is None:
         start_date = date(2021, 1, 1)
     if end_date is None:
-        end_date = date(2024, 12, 31)
+        end_date = date.today() - timedelta(days=1)
     
     # カテゴリーが指定されていない場合はランダムに選択（シードに基づく）
     if category is None:
@@ -194,9 +204,13 @@ def generate_dummy_characteristics(
 
                 value_text = None
             
+            # 日付をランダムに散らす（1-28日）
+            record_day = rng.randint(1, 28)
+            record_date = current.replace(day=record_day)
+
             values.append({
                 "machine_number": machine_number,
-                "record_date": current.isoformat(),
+                "record_date": record_date.isoformat(),
                 "category": category,
                 "characteristic_id": characteristic_id,
                 "value_numeric": round(value_numeric, 2) if value_numeric is not None else None,

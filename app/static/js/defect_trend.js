@@ -90,15 +90,23 @@ async function initFilters() {
 
         // Auto load
         loadData();
+    } else {
+        // Default init: Select Series A and Load
+        seriesSelect.value = 'A';
+        await updateModelList();
+        // updateModelList calls loadData() at the end, so no need to call it explicitly here IF updateModelList always calls it.
+        // Let's verify updateModelList logic.
+        // Yes, it has 'loadData();' at the end.
     }
 
+    // 検索ボタンのイベントハンドラ
     // 検索ボタンのイベントハンドラ
     const searchBtn = document.getElementById('search-btn');
     if (searchBtn) {
         searchBtn.addEventListener('click', () => {
             const series = document.getElementById('series-select').value;
             if (!series) {
-                alert('シリーズを選択してください');
+                showToast('シリーズを選択してください', 'warning');
                 return;
             }
             state.currentPage = 1;
@@ -106,8 +114,32 @@ async function initFilters() {
         });
     }
 
+    // Reset Button
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', async () => {
+            document.getElementById('series-select').value = 'A'; // Default A
+            await updateModelList();
+
+            document.getElementById('category-select').value = '';
+            document.getElementById('code-select').value = '';
+
+            // Date Reset (2 years)
+            const today = new Date();
+            const start = new Date();
+            start.setFullYear(today.getFullYear() - 2);
+            document.getElementById('start-date').valueAsDate = start;
+            document.getElementById('end-date').valueAsDate = today;
+
+            state.currentPage = 1;
+            loadData();
+            showToast('フィルタ条件をリセットしました', 'info');
+        });
+    }
+
     // ページネーション
     const prevBtn = document.getElementById('prev-page');
+    // ... (rest of pagination listeners)
     const nextBtn = document.getElementById('next-page');
     const pageSizeSelect = document.getElementById('page-size');
     const pageInput = document.getElementById('current-page-input');
@@ -149,19 +181,15 @@ async function initFilters() {
     }
 }
 
-
 function initSorting() {
     document.querySelectorAll('th.sortable').forEach(th => {
         th.addEventListener('click', () => {
             const field = th.dataset.sort;
             if (state.sortField === field) {
-                // Toggle order
                 state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
             } else {
                 state.sortField = field;
-                state.sortOrder = 'desc'; // Default to desc for new field? Or asc? usually asc, but dates desc.
-                // Let's default to asc for others, desc for date if needed, but simple toggle is fine.
-                state.sortOrder = 'asc';
+                state.sortOrder = 'desc';
             }
             updateSortUI();
             loadData();
@@ -187,29 +215,32 @@ function changePage(delta) {
 function setupMultiSelect() {
     const btn = document.getElementById('model-select-btn');
     const dropdown = document.getElementById('model-dropdown');
+    if (!btn || !dropdown) return;
 
     btn.addEventListener('click', () => {
         dropdown.classList.toggle('hidden');
     });
 
-    // Close when clicking outside
     document.addEventListener('click', (e) => {
         if (!btn.contains(e.target) && !dropdown.contains(e.target)) {
             dropdown.classList.add('hidden');
         }
     });
 
-    // Select All in dropdown
-    document.getElementById('model-select-all').addEventListener('change', (e) => {
-        document.querySelectorAll('.model-checkbox').forEach(cb => cb.checked = e.target.checked);
-        updateModelButtonText();
-    });
+    const selectAll = document.getElementById('model-select-all');
+    if (selectAll) {
+        selectAll.addEventListener('change', (e) => {
+            document.querySelectorAll('.model-checkbox').forEach(cb => cb.checked = e.target.checked);
+            updateModelButtonText();
+        });
+    }
 }
 
 function updateModelButtonText() {
     const checkboxes = document.querySelectorAll('.model-checkbox');
     const checked = Array.from(checkboxes).filter(cb => cb.checked);
     const btn = document.getElementById('model-select-btn');
+    if (!btn) return;
 
     if (checked.length === 0) {
         btn.textContent = '選択なし';
@@ -223,12 +254,15 @@ function updateModelButtonText() {
 async function updateModelList() {
     const series = document.getElementById('series-select').value;
     const modelList = document.getElementById('model-list');
+    if (!modelList) return;
+
     modelList.innerHTML = '';
 
-    if (!series) return;
+    if (!series) {
+        updateModelButtonText();
+        return;
+    }
 
-    // Fetch models (using dummy logic for now)
-    // Mock data
     let models = [];
     if (series === 'A') models = ['A100', 'A200', 'A300'];
     if (series === 'B') models = ['B100', 'B200'];
@@ -246,13 +280,11 @@ async function updateModelList() {
         modelList.appendChild(div);
     });
 
-    // Add event listeners for new checkboxes
     document.querySelectorAll('.model-checkbox').forEach(cb => {
         cb.addEventListener('change', updateModelButtonText);
     });
 
     updateModelButtonText();
-    // Auto load data on series change
     state.currentPage = 1;
     loadData();
 }
@@ -261,11 +293,42 @@ function initChart() {
     const chartDom = document.getElementById('trend-chart');
     if (chartDom) {
         chart = echarts.init(chartDom);
+
+        // Chart Click Interaction
+        chart.on('click', function (params) {
+            if (params.componentType === 'series' && params.seriesType === 'bar') {
+                const date = params.name; // x-axis value (date)
+
+                // Filter the list below to this specific date
+                // Update Date Inputs to match this date
+                document.getElementById('start-date').value = date;
+                document.getElementById('end-date').value = date;
+
+                showToast(`${date} のデータを表示します`, 'info');
+
+                // Reload only list? No, loadData reloads charts too, effectively "zooming in".
+                // User might want to see the list but keep the chart. 
+                // But simplistic approach is reload everything filtered by this date.
+                // Or maybe just filter the list?
+                // Let's filter everything for consistency.
+                loadData();
+            }
+        });
     }
 
     const distChartDom = document.getElementById('distribution-chart');
     if (distChartDom) {
         distChart = echarts.init(distChartDom);
+
+        // Dist chart click? -> Filter by Month
+        distChart.on('click', function (params) {
+            if (params.componentType === 'series') {
+                // params.name is "YYYY-MM"
+                // Maybe irrelevant for date filter if filtering mainly by *defect occurrence date*.
+                // This chart is manufacturing month.
+                // Let's skip interaction here for now.
+            }
+        });
     }
 
     window.addEventListener('resize', () => {
@@ -277,6 +340,7 @@ function initChart() {
 // --- Data Loading ---
 
 async function loadData() {
+    // ... (unchanged payload prep) ...
     const series = document.getElementById('series-select').value;
     if (!series) return;
 
@@ -333,7 +397,7 @@ async function loadData() {
 
     } catch (e) {
         console.error('Error loading data:', e);
-        alert('データの読み込みに失敗しました');
+        showToast('データの読み込みに失敗しました', 'error');
     }
 }
 
@@ -345,7 +409,16 @@ function renderChart(data) {
     const option = {
         tooltip: {
             trigger: 'axis',
-            axisPointer: { type: 'shadow' }
+            axisPointer: { type: 'shadow' },
+            formatter: function (params) {
+                // params is array of series data for this axis
+                let result = `<strong>${params[0].name}</strong><br/>`;
+                params.forEach(param => {
+                    result += `${param.marker} ${param.seriesName}: ${param.value} 台<br/>`;
+                });
+                result += '<span style="font-size:10px; color:#aaa;">(クリックでこの日の詳細を表示)</span>';
+                return result;
+            }
         },
         grid: {
             left: '3%',
@@ -373,7 +446,14 @@ function renderChart(data) {
                 type: 'bar',
                 data: data.counts,
                 itemStyle: { color: '#ef4444' }, // Red for defects
-                barMaxWidth: 50
+                barMaxWidth: 50,
+                // Add emphasis for interactive feel
+                emphasis: {
+                    focus: 'series',
+                    itemStyle: {
+                        color: '#b91c1c'
+                    }
+                }
             }
         ]
     };
@@ -383,6 +463,11 @@ function renderChart(data) {
 
 function renderDistributionChart(data) {
     if (!distChart) return;
+
+    if (!data.months || data.months.length === 0) {
+        distChart.clear();
+        return;
+    }
 
     // Calculate defect rates
     const rates = data.total_counts.map((total, i) => {
@@ -435,7 +520,7 @@ function renderDistributionChart(data) {
                 type: 'value',
                 name: '発生率',
                 position: 'right',
-                offset: 50, // Move outer right
+                offset: 50,
                 axisLine: { show: true, lineStyle: { color: '#fbbf24' } },
                 axisLabel: { formatter: '{value} %', color: '#fbbf24' },
                 splitLine: { show: false }
@@ -447,24 +532,24 @@ function renderDistributionChart(data) {
                 type: 'bar',
                 yAxisIndex: 0,
                 data: data.total_counts,
-                itemStyle: { color: '#d1d5db' }, // Lighter Gray
+                itemStyle: { color: '#d1d5db' },
                 barGap: '-100%',
                 opacity: 0.5
             },
             {
                 name: '不具合発生台数',
                 type: 'bar',
-                yAxisIndex: 1, // Use right-inner axis
+                yAxisIndex: 1,
                 data: data.defect_counts,
-                itemStyle: { color: '#ef4444' }, // Red
-                barWidth: '40%' // Slightly thinner than total
+                itemStyle: { color: '#ef4444' },
+                barWidth: '40%'
             },
             {
                 name: '不具合発生率',
                 type: 'line',
-                yAxisIndex: 2, // Use right-outer axis
+                yAxisIndex: 2,
                 data: rates,
-                itemStyle: { color: '#fbbf24' }, // Amber
+                itemStyle: { color: '#fbbf24' },
                 symbol: 'circle',
                 symbolSize: 6,
                 lineStyle: { width: 2 }
@@ -475,8 +560,25 @@ function renderDistributionChart(data) {
     distChart.setOption(option);
 }
 
+function copySelectedMachines() {
+    const selected = Array.from(document.querySelectorAll('.machine-checkbox:checked'))
+        .map(cb => cb.value);
+
+    if (selected.length === 0) {
+        showToast('機番が選択されていません', 'warning');
+        return;
+    }
+
+    const text = selected.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        showToast(`${selected.length}件の機番をクリップボードにコピーしました`, 'success');
+    }).catch(err => {
+        console.error('Copy failed:', err);
+        showToast('コピーに失敗しました', 'error');
+    });
+}
+
 function renderTable(data) {
-    // data = { items: [], total: int, page: int, page_size: int }
     const items = data.items || [];
     const total = data.total || 0;
     state.totalItems = total;
@@ -485,30 +587,32 @@ function renderTable(data) {
     const tbody = document.getElementById('results-body');
     const countSpan = document.getElementById('result-count');
 
-    countSpan.textContent = total;
-    tbody.innerHTML = '';
+    if (countSpan) countSpan.textContent = total;
+    if (tbody) {
+        tbody.innerHTML = '';
 
-    if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">データがありません</td></tr>';
-        renderPagination();
-        return;
+        if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">データがありません</td></tr>';
+            renderPagination();
+            return;
+        }
+
+        items.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="checkbox" class="machine-checkbox" value="${item.machine_id}"></td>
+                <td>${item.machine_id}</td>
+                <td>${item.series}</td>
+                <td>${item.model}</td>
+                <td>${item.defect_date}</td>
+                <td>${item.defect_category}</td>
+                <td>
+                    <a href="/history?machine=${item.machine_id}" class="btn btn-sm btn-secondary">履歴表示</a>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
     }
-
-    items.forEach(item => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><input type="checkbox" class="machine-checkbox" value="${item.machine_id}"></td>
-            <td>${item.machine_id}</td>
-            <td>${item.series}</td>
-            <td>${item.model}</td>
-            <td>${item.defect_date}</td>
-            <td>${item.defect_category}</td>
-            <td>
-                <a href="/history?machine=${item.machine_id}" class="btn btn-sm btn-secondary">履歴表示</a>
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
 
     renderPagination();
 }
@@ -519,39 +623,31 @@ function renderPagination() {
     const size = state.pageSize;
     const totalPages = Math.ceil(total / size);
 
-    document.getElementById('total-count').textContent = total;
+    const totalCount = document.getElementById('total-count');
+    if (totalCount) totalCount.textContent = total;
 
-    // Start/End count
     if (total === 0) {
-        document.getElementById('start-count').textContent = 0;
-        document.getElementById('end-count').textContent = 0;
+        const startCount = document.getElementById('start-count');
+        const endCount = document.getElementById('end-count');
+        if (startCount) startCount.textContent = 0;
+        if (endCount) endCount.textContent = 0;
     } else {
         const start = (page - 1) * size + 1;
         const end = Math.min(page * size, total);
-        document.getElementById('start-count').textContent = start;
-        document.getElementById('end-count').textContent = end;
+        const startCount = document.getElementById('start-count');
+        const endCount = document.getElementById('end-count');
+        if (startCount) startCount.textContent = start;
+        if (endCount) endCount.textContent = end;
     }
 
-    document.getElementById('current-page-input').value = page;
-    document.getElementById('total-pages').textContent = totalPages;
+    const pageInput = document.getElementById('current-page-input');
+    const totalPagesSpan = document.getElementById('total-pages');
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
 
-    document.getElementById('prev-page').disabled = (page <= 1);
-    document.getElementById('next-page').disabled = (page >= totalPages);
-}
+    if (pageInput) pageInput.value = page;
+    if (totalPagesSpan) totalPagesSpan.textContent = totalPages;
 
-function copySelectedMachines() {
-    const selected = Array.from(document.querySelectorAll('.machine-checkbox:checked'))
-        .map(cb => cb.value);
-
-    if (selected.length === 0) {
-        alert('機番が選択されていません');
-        return;
-    }
-
-    const text = selected.join('\n');
-    navigator.clipboard.writeText(text).then(() => {
-        alert(`${selected.length}件の機番をコピーしました`);
-    }).catch(err => {
-        console.error('Copy failed:', err);
-    });
+    if (prevBtn) prevBtn.disabled = (page <= 1);
+    if (nextBtn) nextBtn.disabled = (page >= totalPages);
 }

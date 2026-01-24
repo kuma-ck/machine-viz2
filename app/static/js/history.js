@@ -45,6 +45,9 @@ const state = {
     pageSize: 20,
     sortField: 'date',
     sortOrder: 'asc',
+    // Events Table State
+    eventSortOrder: 'desc',
+    eventFilterType: '',
     // UI状態
     dataLoaded: false,
     chartDisplayed: false,
@@ -252,6 +255,20 @@ function initEventListeners() {
 
     // CSVダウンロード
     document.getElementById('download-csv-btn')?.addEventListener('click', downloadCSV);
+
+    // Filter & Sort for Events Table
+    document.getElementById('event-type-filter')?.addEventListener('change', (e) => {
+        state.eventFilterType = e.target.value;
+        renderEventsTable();
+    });
+
+    const eventDateHeader = document.querySelector('th[data-sort="event_date"]');
+    if (eventDateHeader) {
+        eventDateHeader.addEventListener('click', () => {
+            state.eventSortOrder = state.eventSortOrder === 'asc' ? 'desc' : 'asc';
+            renderEventsTable();
+        });
+    }
 }
 
 function setupSeriesListeners(seriesId) {
@@ -602,11 +619,29 @@ function renderMachineInfo() {
 
 function renderEventsTable() {
     const tbody = document.getElementById('events-table-body');
-
     if (!tbody) return;
 
+    let displayEvents = [...state.events];
+
+    // Filter
+    if (state.eventFilterType) {
+        displayEvents = displayEvents.filter(e => e.event_type === state.eventFilterType);
+    }
+
+    // Sort (only by date supported for now)
+    displayEvents.sort((a, b) => { // Asc or Desc
+        const da = new Date(a.event_date);
+        const db = new Date(b.event_date);
+        return state.eventSortOrder === 'asc' ? da - db : db - da; // Desc default (latest first) usually, but logic here
+    });
+
+    if (displayEvents.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">イベントなし</td></tr>';
+        return;
+    }
+
     // 新レイアウトではイベント情報は常に表示（コンパクト版）
-    tbody.innerHTML = state.events.map(event => `
+    tbody.innerHTML = displayEvents.map(event => `
         <tr>
             <td>${event.event_date}</td>
             <td>${event.event_type}</td>
@@ -614,6 +649,13 @@ function renderEventsTable() {
             <td>${event.description || '-'}</td>
         </tr>
     `).join('');
+
+    // Sort Icon Update
+    const th = document.querySelector('th[data-sort="event_date"]');
+    if (th) {
+        th.classList.remove('asc', 'desc');
+        th.classList.add(state.eventSortOrder);
+    }
 }
 
 function renderChart() {

@@ -59,6 +59,33 @@ function initFilters() {
         loadData();
     });
 
+    // Reset Button
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            // Reset form inputs
+            document.getElementById('rank-select').value = '';
+            document.getElementById('series-select').value = '';
+            updateModelList();
+
+            document.getElementById('category-select').value = '';
+            document.getElementById('code-input').value = '';
+            document.getElementById('logic-select').value = '';
+            document.getElementById('alert-select').value = '';
+
+            // Date Reset
+            const today = new Date();
+            const start = new Date();
+            start.setDate(today.getDate() - 30);
+            document.getElementById('start-date').valueAsDate = start;
+            document.getElementById('end-date').valueAsDate = today;
+
+            state.currentPage = 1;
+            loadData();
+            showToast('フィルタ条件をリセットしました', 'info');
+        });
+    }
+
     // Multi-select dropdown logic
     setupMultiSelect();
 
@@ -236,9 +263,11 @@ async function loadData() {
         const data = await res.json();
         renderTable(data);
 
+        // Show success/info toast on search action validation? No, too noisy for every load. Only error.
+
     } catch (e) {
         console.error('Error loading data:', e);
-        alert('データの読み込みに失敗しました');
+        showToast('データの読み込みに失敗しました。再試行してください。', 'error');
     }
 }
 
