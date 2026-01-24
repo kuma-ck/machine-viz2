@@ -120,10 +120,37 @@ body {
     background-clip: text;
     text-decoration: none;
     transition: opacity var(--transition-base);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.navbar-brand .brand-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
 }
 
 .navbar-brand a:hover {
     opacity: 0.8;
+}
+
+.navbar-item {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    font-weight: 500;
+    position: relative;
+    transition: all var(--transition-base);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.navbar-item svg {
+    width: 16px;
+    height: 16px;
 }
 
 .navbar-menu {
@@ -487,10 +514,17 @@ body {
 /* テーブル */
 .data-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: var(--font-size-sm);
     border-radius: var(--border-radius);
     overflow: hidden;
+}
+
+.data-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .data-table.compact th,

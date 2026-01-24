@@ -320,6 +320,12 @@ function navigateToTrend(item) {
         const end = new Date(targetDate);
         end.setDate(end.getDate() + 30);
 
+        // 今日より未来の日付にはしない
+        const today = new Date();
+        if (end > today) {
+            end.setTime(today.getTime());
+        }
+
         params.append('start', start.toISOString().split('T')[0]);
         params.append('end', end.toISOString().split('T')[0]);
     }

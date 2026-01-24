@@ -10,25 +10,34 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <!-- ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     {% block head %}{% endblock %}
 </head>
 
 <body>
     <nav class="navbar">
         <div class="navbar-brand">
-            <a href="/">Mona</a>
+            <a href="/"><img src="/static/favicon.png" alt="Mona" class="brand-icon"> Mona</a>
         </div>
         <div class="navbar-menu">
-            <a href="/patrol/list"
-                class="navbar-item {% if request.url.path.startswith('/patrol') %}active{% endif %}">パトロール結果一覧</a>
+            <a href="/patrol/list" class="navbar-item {% if request.url.path.startswith('/patrol') %}active{% endif %}">
+                <i data-lucide="shield-check"></i> パトロール結果
+            </a>
             <a href="/defect-trend"
-                class="navbar-item {% if request.url.path.startswith('/defect-trend') %}active{% endif %}">不具合傾向表示</a>
-            <a href="/search"
-                class="navbar-item {% if request.url.path.startswith('/search') %}active{% endif %}">機番検索</a>
-            <a href="/history"
-                class="navbar-item {% if request.url.path.startswith('/history') %}active{% endif %}">機番履歴表示</a>
+                class="navbar-item {% if request.url.path.startswith('/defect-trend') %}active{% endif %}">
+                <i data-lucide="trending-up"></i> 不具合傾向
+            </a>
+            <a href="/search" class="navbar-item {% if request.url.path.startswith('/search') %}active{% endif %}">
+                <i data-lucide="search"></i> 機番検索
+            </a>
+            <a href="/history" class="navbar-item {% if request.url.path.startswith('/history') %}active{% endif %}">
+                <i data-lucide="history"></i> 機番履歴
+            </a>
             <a href="/data-catalog"
-                class="navbar-item {% if request.url.path.startswith('/data-catalog') %}active{% endif %}">データカタログ</a>
+                class="navbar-item {% if request.url.path.startswith('/data-catalog') %}active{% endif %}">
+                <i data-lucide="database"></i> データカタログ
+            </a>
         </div>
     </nav>
 
@@ -37,6 +46,7 @@
     </main>
 
     {% block scripts %}{% endblock %}
+    <script>lucide.createIcons();</script>
 </body>
 
 </html>

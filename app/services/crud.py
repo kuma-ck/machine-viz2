@@ -100,7 +100,20 @@ async def get_characteristics(
             x_axis_type="daily"
         )
     
-    # For monthly or usage, return DB data
+    # Check if this is a qualitative variable (not in DB, generate dynamically)
+    qualitative_ids = dummy_data.QUALITATIVE_CHARACTERISTIC_IDS.get(category, [])
+    if characteristic_id in qualitative_ids:
+        # Generate qualitative data dynamically
+        return dummy_data.generate_dummy_characteristics(
+            machine_number=machine_number,
+            category=category,
+            characteristic_id=characteristic_id,
+            start_date=start_date,
+            end_date=end_date,
+            x_axis_type=x_axis_type
+        )
+    
+    # For monthly or usage with quantitative data, return DB data
     return [
         {
             "machine_number": machine_number,

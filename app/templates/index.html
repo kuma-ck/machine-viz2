@@ -5,20 +5,33 @@
 {% block head %}
 <style>
     .home-container {
-        max-width: 1000px;
+        max-width: 1200px;
         margin: 0 auto;
         padding: 2rem 1rem;
     }
 
     .home-header {
         text-align: center;
-        margin-bottom: 3rem;
+        margin-bottom: 2rem;
     }
 
     .home-header h1 {
         font-size: 2.5rem;
-        margin-bottom: 1rem;
-        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+    }
+
+    .home-header h1 img {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
     }
 
     .home-header p {
@@ -26,28 +39,86 @@
         font-size: 1.1rem;
     }
 
+    /* サマリーカード */
+    .summary-section {
+        margin-bottom: 2.5rem;
+    }
+
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+    }
+
+    .summary-card {
+        background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        border: 1px solid var(--border-color);
+        text-align: center;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .summary-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .summary-icon {
+        width: 40px;
+        height: 40px;
+        margin: 0 auto 0.75rem;
+        padding: 8px;
+        background: var(--gradient-primary);
+        border-radius: 10px;
+        color: white;
+    }
+
+    .summary-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+        margin-bottom: 0.25rem;
+    }
+
+    .summary-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
+    /* ワークフローセクション */
     .workflow-section {
-        margin-bottom: 4rem;
+        margin-bottom: 2.5rem;
     }
 
     .section-title {
-        font-size: 1.5rem;
-        margin-bottom: 1.5rem;
+        font-size: 1.25rem;
+        margin-bottom: 1rem;
         padding-left: 1rem;
         border-left: 4px solid var(--primary-color);
         color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .section-title svg {
+        width: 20px;
+        height: 20px;
+        color: var(--primary-color);
     }
 
     .card-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 2rem;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
     }
 
     .nav-card {
         background: white;
         border-radius: var(--radius-lg);
-        padding: 2rem;
+        padding: 1.5rem;
         box-shadow: var(--shadow-sm);
         transition: transform 0.2s, box-shadow 0.2s;
         border: 1px solid var(--border-color);
@@ -65,13 +136,17 @@
     }
 
     .card-icon {
-        font-size: 2.5rem;
+        width: 48px;
+        height: 48px;
         margin-bottom: 1rem;
-        color: var(--primary-color);
+        padding: 12px;
+        background: var(--gradient-primary);
+        border-radius: 12px;
+        color: white;
     }
 
     .card-title {
-        font-size: 1.25rem;
+        font-size: 1.1rem;
         font-weight: 600;
         margin-bottom: 0.5rem;
         color: var(--text-primary);
@@ -79,32 +154,35 @@
 
     .card-desc {
         color: var(--text-secondary);
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         line-height: 1.6;
         flex-grow: 1;
     }
 
     .flow-steps {
-        margin-top: 1.5rem;
-        padding-top: 1rem;
+        margin-top: 1rem;
+        padding-top: 0.75rem;
         border-top: 1px dashed var(--border-color);
-        font-size: 0.9rem;
-        color: var(--text-secondary);
+        font-size: 0.85rem;
+        color: var(--text-muted);
     }
 
     .flow-step {
         display: flex;
         align-items: center;
-        margin-bottom: 0.5rem;
+        gap: 6px;
+        margin-bottom: 0.25rem;
     }
 
-    .flow-step:last-child {
-        margin-bottom: 0;
+    .flow-step svg {
+        width: 14px;
+        height: 14px;
     }
 
-    .step-arrow {
-        margin: 0 0.5rem;
-        color: var(--text-tertiary);
+    @media (max-width: 768px) {
+        .summary-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
     }
 </style>
 {% endblock %}
@@ -112,32 +190,68 @@
 {% block content %}
 <div class="home-container">
     <div class="home-header">
-        <h1>Mona</h1>
+        <h1><img src="/static/favicon.png" alt=""> Mona</h1>
         <p>機番データ、不具合情報、パトロール結果を一元管理・分析</p>
+    </div>
+
+    <!-- サマリーカード -->
+    <div class="summary-section">
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="summary-icon">
+                    <i data-lucide="cpu"></i>
+                </div>
+                <div class="summary-value">50</div>
+                <div class="summary-label">登録機番</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon">
+                    <i data-lucide="alert-triangle"></i>
+                </div>
+                <div class="summary-value">12</div>
+                <div class="summary-label">要注意アラート</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon">
+                    <i data-lucide="activity"></i>
+                </div>
+                <div class="summary-value">156</div>
+                <div class="summary-label">今月の検知</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon">
+                    <i data-lucide="check-circle"></i>
+                </div>
+                <div class="summary-value">98%</div>
+                <div class="summary-label">稼働率</div>
+            </div>
+        </div>
     </div>
 
     <!-- パターン1 -->
     <div class="workflow-section">
-        <h2 class="section-title">不具合監視・分析フロー</h2>
+        <h2 class="section-title"><i data-lucide="shield-check"></i> 不具合監視・分析フロー</h2>
         <div class="card-grid">
             <a href="/patrol/list" class="nav-card">
-                <div class="card-icon">🔍</div>
+                <div class="card-icon">
+                    <i data-lucide="shield-check"></i>
+                </div>
                 <div class="card-title">パトロール結果一覧</div>
                 <div class="card-desc">
                     定期的な監視ロジックによる検出結果を確認します。
                     異常検知された機番から不具合傾向を分析します。
                 </div>
                 <div class="flow-steps">
-                    <div class="flow-step">1. パトロール結果確認</div>
-                    <div class="flow-step">↓</div>
-                    <div class="flow-step">2. 不具合傾向分析</div>
-                    <div class="flow-step">↓</div>
-                    <div class="flow-step">3. 機番履歴詳細</div>
+                    <div class="flow-step"><i data-lucide="chevron-right"></i> パトロール結果確認</div>
+                    <div class="flow-step"><i data-lucide="chevron-right"></i> 不具合傾向分析</div>
+                    <div class="flow-step"><i data-lucide="chevron-right"></i> 機番履歴詳細</div>
                 </div>
             </a>
 
             <a href="/defect-trend" class="nav-card">
-                <div class="card-icon">📊</div>
+                <div class="card-icon">
+                    <i data-lucide="trending-up"></i>
+                </div>
                 <div class="card-title">不具合傾向表示</div>
                 <div class="card-desc">
                     シリーズや不具合ごとの発生傾向を可視化します。
@@ -149,27 +263,40 @@
 
     <!-- パターン2 -->
     <div class="workflow-section">
-        <h2 class="section-title">機番調査フロー</h2>
+        <h2 class="section-title"><i data-lucide="search"></i> 機番調査フロー</h2>
         <div class="card-grid">
             <a href="/search" class="nav-card">
-                <div class="card-icon">🔎</div>
+                <div class="card-icon">
+                    <i data-lucide="search"></i>
+                </div>
                 <div class="card-title">機番検索</div>
                 <div class="card-desc">
                     不具合条件や属性条件から機番を検索します。
                     特定の機番をピンポイントで調査する場合に使用します。
                 </div>
                 <div class="flow-steps">
-                    <div class="flow-step">1. 機番検索</div>
-                    <div class="flow-step">↓</div>
-                    <div class="flow-step">2. 機番履歴詳細</div>
+                    <div class="flow-step"><i data-lucide="chevron-right"></i> 機番検索</div>
+                    <div class="flow-step"><i data-lucide="chevron-right"></i> 機番履歴詳細</div>
                 </div>
             </a>
 
             <a href="/history" class="nav-card">
-                <div class="card-icon">📈</div>
+                <div class="card-icon">
+                    <i data-lucide="history"></i>
+                </div>
                 <div class="card-title">機番履歴表示</div>
                 <div class="card-desc">
                     特定機番のイベント履歴、特性値推移を詳細に確認できます。
+                </div>
+            </a>
+
+            <a href="/data-catalog" class="nav-card">
+                <div class="card-icon">
+                    <i data-lucide="database"></i>
+                </div>
+                <div class="card-title">データカタログ</div>
+                <div class="card-desc">
+                    使用しているデータエンティティの構造と内容を確認できます。
                 </div>
             </a>
         </div>
