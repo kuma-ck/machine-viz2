@@ -20,6 +20,8 @@ const state = {
     itemsPerPage: 50,
     // UI
     relativeFreq: false,
+    sortKey: 'machine_id',
+    sortOrder: 'asc' // or 'desc'
 };
 
 let mainChart = null;
@@ -44,7 +46,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     await refreshCharacteristics('category-select', 'characteristic-select');
     await refreshCharacteristics('category-select-y', 'characteristic-select-y');
 
-    // Auto load if params exist
+    // Restore state from URL
+    await restoreStateFromUrl();
+
+    // Auto load if params exist or just default
     loadData();
 });
 
@@ -76,8 +81,12 @@ function initFilters() {
     document.getElementById('category-select-y').addEventListener('change', async (e) => {
         state.categoryY = e.target.value;
         await refreshCharacteristics('category-select-y', 'characteristic-select-y');
+        if (state.chartType === 'scatter') loadData();
     });
-    document.getElementById('characteristic-select-y').addEventListener('change', (e) => state.characteristicIdY = e.target.value);
+    document.getElementById('characteristic-select-y').addEventListener('change', (e) => {
+        state.characteristicIdY = e.target.value;
+        if (state.chartType === 'scatter') loadData();
+    });
 
     // Search action
     document.getElementById('search-btn').addEventListener('click', loadData);
@@ -120,11 +129,20 @@ function initFilters() {
     });
 
     document.getElementById('next-page-btn').addEventListener('click', () => {
-        const totalPages = Math.ceil(state.detailData.length / state.itemsPerPage);
-        if (state.currentPage < totalPages) {
+        const total = state.detailData.length;
+        const max = Math.ceil(total / state.itemsPerPage);
+        if (state.currentPage < max) {
             state.currentPage++;
             renderTable(state.detailData);
         }
+    });
+
+    // Sort Handlers (Delegate to table headers)
+    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
+        th.addEventListener('click', (e) => {
+            const key = e.target.closest('th').dataset.sort;
+            sortData(key);
+        });
     });
 
     // Download
@@ -241,6 +259,8 @@ async function loadData() {
     }
 
     const activeTab = document.querySelector('.tab.active').dataset.tab;
+    // Update URL first
+    updateUrlFromState();
 
     const params = new URLSearchParams({
         series: series,
@@ -386,6 +406,8 @@ function renderHistogram(data) {
     mainChart.setOption(option, true);
 }
 
+
+
 function renderScatter(data) {
     // data.data = [{x, y, machine_id, model}]
 
@@ -397,6 +419,10 @@ function renderScatter(data) {
         };
     });
 
+    // Get Axis Labels
+    const xLabel = document.getElementById('characteristic-select').options[document.getElementById('characteristic-select').selectedIndex]?.text || state.characteristicId;
+    const yLabel = document.getElementById('characteristic-select-y').options[document.getElementById('characteristic-select-y').selectedIndex]?.text || state.characteristicIdY;
+
     const option = {
         tooltip: {
             trigger: 'item',
@@ -405,14 +431,24 @@ function renderScatter(data) {
                 return `
                     ${d.machine_id}<br/>
                     Model: ${d.model}<br/>
-                    X: ${d.value[0]}<br/>
-                    Y: ${d.value[1]}
+                    ${xLabel}: ${d.value[0]}<br/>
+                    ${yLabel}: ${d.value[1]}
                 `;
             }
         },
-        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-        xAxis: { type: 'value', scale: true },
-        yAxis: { type: 'value', scale: true },
+        grid: { left: '3%', right: '10%', bottom: '5%', containLabel: true },
+        xAxis: {
+            type: 'value',
+            scale: true,
+            name: xLabel,
+            nameLocation: 'middle',
+            nameGap: 25
+        },
+        yAxis: {
+            type: 'value',
+            scale: true,
+            name: yLabel
+        },
         series: [{
             type: 'scatter',
             symbolSize: 8,
@@ -495,7 +531,105 @@ function handleChartClick(params) {
     }
 }
 
+function sortData(key) {
+    if (!state.detailData || state.detailData.length === 0) return;
+
+    if (state.sortKey === key) {
+        state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        state.sortKey = key;
+        state.sortOrder = 'asc';
+    }
+
+    state.detailData.sort((a, b) => {
+        const valA = a[key];
+        const valB = b[key];
+
+        let comparison = 0;
+        if (typeof valA === 'string' && typeof valB === 'string') {
+            comparison = valA.localeCompare(valB);
+        } else {
+            comparison = valA - valB;
+        }
+
+        return state.sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    state.currentPage = 1; // Reset to first page after sorting
+    renderTable(state.detailData);
+}
+
+
+function sortData(key) {
+    if (!state.detailData || state.detailData.length === 0) return;
+
+    if (state.sortKey === key) {
+        // Toggle order
+        state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        // New key
+        state.sortKey = key;
+        state.sortOrder = 'asc';
+    }
+
+    state.detailData.sort((a, b) => {
+        const valA = a[key];
+        const valB = b[key];
+
+        let comparison = 0;
+        // Check if values are numeric
+        const numA = parseFloat(valA);
+        const numB = parseFloat(valB);
+        const isNum = !isNaN(numA) && !isNaN(numB) && key.includes('value'); // Only force numeric sort for value columns if parseable
+
+        if (isNum) {
+            comparison = numA - numB;
+        } else {
+            if (typeof valA === 'string' && typeof valB === 'string') {
+                comparison = valA.localeCompare(valB);
+            } else {
+                comparison = (valA > valB) ? 1 : ((valB > valA) ? -1 : 0);
+            }
+        }
+
+        return state.sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    // Reset to page 1
+    state.currentPage = 1;
+    renderTable(state.detailData);
+}
+
 function renderTable(rows, page = state.currentPage) {
+    if (!rows) {
+        document.getElementById('detail-table-body').innerHTML = '<tr><td colspan="6">データなし</td></tr>';
+        document.getElementById('data-count').textContent = '0台';
+        renderPagination(0);
+        return;
+    }
+
+    // Update Headers with Sort Indicators
+    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
+        const key = th.dataset.sort;
+        let indicator = '';
+        if (state.sortKey === key) {
+            indicator = state.sortOrder === 'asc' ? ' ▲' : ' ▼';
+            th.style.fontWeight = 'bold';
+            th.style.backgroundColor = '#eef2f6';
+        } else {
+            th.style.fontWeight = 'normal';
+            th.style.backgroundColor = '#f8fafc';
+        }
+        // removing existing indicator text if any (simple approach: reset text content based on key mapping, but safest is to append span)
+        // simpler: just use a span for indicator
+        const textSpan = th.querySelector('.sort-text') || th; // Assuming we might wrap text later, but for now just append
+        // Actually, let's keep it simple: assume th has text.
+        // Better: Reset HTML to Text + Span
+        const label = th.dataset.label || th.textContent.replace(/[▲▼]/g, '').trim();
+        th.dataset.label = label; // cache label
+        th.innerHTML = `${label}<span style="margin-left:4px; font-size:0.8em; color:var(--primary-color);">${indicator}</span>`;
+    });
+
     const tbody = document.getElementById('detail-table-body');
     tbody.innerHTML = '';
 
@@ -580,4 +714,112 @@ function downloadCSV() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+
+function updateUrlFromState() {
+    const params = new URLSearchParams();
+
+    // Common
+    params.set('tab', state.chartType);
+    params.set('series', state.series);
+    params.set('start_date', document.getElementById('start-date').value);
+    params.set('end_date', document.getElementById('end-date').value);
+    params.set('category', state.category);
+    params.set('characteristic_id', state.characteristicId);
+    params.set('aggregation_method', state.aggregationMethod);
+
+    // Histogram
+    if (state.chartType === 'histogram') {
+        const binMode = document.querySelector('input[name="bin-mode"]:checked').value;
+        params.set('bin_mode', binMode);
+        if (binMode === 'count') {
+            params.set('bins', document.getElementById('bin-count').value);
+        } else {
+            params.set('bin_width', document.getElementById('bin-width').value);
+        }
+    }
+
+    // Scatter
+    if (state.chartType === 'scatter') {
+        params.set('category_y', state.categoryY);
+        params.set('characteristic_id_y', state.characteristicIdY);
+        // params.set('agg_y', state.aggregationMethodY);
+    }
+
+    // Pagination
+    // params.set('page', state.currentPage); // Optional: if we want to deep link to specific page
+
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.pushState({ path: newUrl }, '', newUrl);
+}
+
+async function restoreStateFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('series')) return; // No params, stick to defaults
+
+    // Common
+    state.series = params.get('series') || 'A';
+    document.getElementById('series-select').value = state.series;
+
+    const start = params.get('start_date');
+    if (start) document.getElementById('start-date').value = start;
+
+    const end = params.get('end_date');
+    if (end) document.getElementById('end-date').value = end;
+
+    state.category = params.get('category');
+    if (state.category) {
+        document.getElementById('category-select').value = state.category;
+        await refreshCharacteristics('category-select', 'characteristic-select');
+    }
+
+    state.characteristicId = params.get('characteristic_id');
+    if (state.characteristicId) {
+        document.getElementById('characteristic-select').value = state.characteristicId;
+    }
+
+    state.aggregationMethod = params.get('aggregation_method') || 'latest';
+    document.getElementById('aggregation-method').value = state.aggregationMethod;
+
+    // Tab
+    const tab = params.get('tab');
+    if (tab) {
+        state.chartType = tab;
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        const targetTab = document.querySelector(`.tab[data-tab="${tab}"]`);
+        if (targetTab) targetTab.classList.add('active');
+
+        // Update Filter Visibility
+        document.getElementById('scatter-settings').style.display = (tab === 'scatter') ? 'flex' : 'none';
+        document.getElementById('hist-options').style.display = (tab === 'histogram') ? 'flex' : 'none';
+    }
+
+    // Histogram Specifics
+    if (tab === 'histogram') {
+        const binMode = params.get('bin_mode');
+        if (binMode) {
+            const radio = document.querySelector(`input[name="bin-mode"][value="${binMode}"]`);
+            if (radio) {
+                radio.checked = true;
+                // Triggre change logic to toggle inputs
+                radio.dispatchEvent(new Event('change'));
+            }
+        }
+        if (params.get('bins')) document.getElementById('bin-count').value = params.get('bins');
+        if (params.get('bin_width')) document.getElementById('bin-width').value = params.get('bin_width');
+    }
+
+    // Scatter Specifics
+    if (tab === 'scatter') {
+        state.categoryY = params.get('category_y');
+        if (state.categoryY) {
+            document.getElementById('category-select-y').value = state.categoryY;
+            await refreshCharacteristics('category-select-y', 'characteristic-select-y');
+        }
+        state.characteristicIdY = params.get('characteristic_id_y');
+        if (state.characteristicIdY) {
+            document.getElementById('characteristic-select-y').value = state.characteristicIdY;
+        }
+    }
 }

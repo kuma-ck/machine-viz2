@@ -184,12 +184,19 @@
             <table class="data-table compact">
                 <thead>
                     <tr>
-                        <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">機番</th>
-                        <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">シリーズ</th>
-                        <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">機種</th>
-                        <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">値 (X)</th>
-                        <th class="col-y"
-                            style="position: sticky; top: 0; background: #f8fafc; z-index: 10; display: none;">値 (Y)
+                        <th data-sort="machine_id"
+                            style="position: sticky; top: 0; background: #f8fafc; z-index: 10; cursor: pointer;">機番</th>
+                        <th data-sort="series"
+                            style="position: sticky; top: 0; background: #f8fafc; z-index: 10; cursor: pointer;">シリーズ
+                        </th>
+                        <th data-sort="model"
+                            style="position: sticky; top: 0; background: #f8fafc; z-index: 10; cursor: pointer;">機種</th>
+                        <th data-sort="value"
+                            style="position: sticky; top: 0; background: #f8fafc; z-index: 10; cursor: pointer;">値 (X)
+                        </th>
+                        <th class="col-y" data-sort="valueY"
+                            style="position: sticky; top: 0; background: #f8fafc; z-index: 10; display: none; cursor: pointer;">
+                            値 (Y)
                         </th>
                         <th style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">操作</th>
                     </tr>

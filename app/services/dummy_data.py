@@ -894,7 +894,8 @@ def get_cross_section_scatter(
     
     # 解決策: Machine ID生成ロジックを分離するか、ここで一括生成する
     
-    seed_str = f"{series}_{models}_{start_date}_{end_date}_scatter_ids"
+    # シードに軸のIDを含めることで、変数が変わればデータも変わるようにする
+    seed_str = f"{series}_{models}_{start_date}_{end_date}_{category_x}_{id_x}_{category_y}_{id_y}_scatter_ids"
     rng = random.Random(seed_str)
     
     available_models = models if models else MODEL_NUMBERS.get(series, ["Unknown"])
@@ -902,15 +903,13 @@ def get_cross_section_scatter(
     
     data = []
     
-    # X軸の設定
-    base_mean_x = 50; base_std_x = 10
-    if id_x == "温度": base_mean_x, base_std_x = 25, 5
-    elif id_x == "圧力": base_mean_x, base_std_x = 100, 10
+    # X軸の設定 (IDに基づいてベース値を変動させる)
+    base_mean_x = 50 + (hash(id_x) % 50)
+    base_std_x = 5 + (hash(id_x) % 15)
     
     # Y軸の設定
-    base_mean_y = 50; base_std_y = 10
-    if id_y == "温度": base_mean_y, base_std_y = 25, 5
-    elif id_y == "圧力": base_mean_y, base_std_y = 100, 10
+    base_mean_y = 50 + (hash(id_y) % 50)
+    base_std_y = 5 + (hash(id_y) % 15)
     
     # 相関係数を適当に設定 (-1.0 ~ 1.0)
     # シードに基づいて固定
