@@ -308,7 +308,6 @@ function renderTable(data) {
             <td>${item.rank}</td>
             <td>${item.series}</td>
             <td>${item.model}</td>
-            <td>${item.machine_id}</td>
             <td>${item.defect_category}</td>
             <td>${item.defect_code}</td>
             <td>${item.target_date}</td>
