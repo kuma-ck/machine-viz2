@@ -110,6 +110,26 @@
         <button id="reset-btn" class="btn btn-sm btn-secondary">リセット</button>
     </div>
 
+    <!-- Group Comparison (Expandable) -->
+    <details class="filter-group-details"
+        style="margin-top: 8px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px; background: white;">
+        <summary style="cursor: pointer; font-size: 0.9rem; font-weight: 500; color: var(--text-primary);">
+            <i data-lucide="users" style="width: 14px; height: 14px; vertical-align: middle;"></i> グループ比較設定
+        </summary>
+        <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div>
+                <label style="font-size: 0.8rem; color: #6366f1; font-weight: bold;">Group 1 (青)</label>
+                <textarea id="group1-ids" class="form-input" style="width: 100%; height: 60px; font-size: 0.8rem;"
+                    placeholder="機番を入力 (カンマ/改行区切り)"></textarea>
+            </div>
+            <div>
+                <label style="font-size: 0.8rem; color: #f43f5e; font-weight: bold;">Group 2 (赤)</label>
+                <textarea id="group2-ids" class="form-input" style="width: 100%; height: 60px; font-size: 0.8rem;"
+                    placeholder="機番を入力 (カンマ/改行区切り)"></textarea>
+            </div>
+        </div>
+    </details>
+
     <!-- Scatter Plot Secondary Filter Row -->
     <div id="scatter-settings" class="filter-row-secondary" style="display: none;">
         <div style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); white-space: nowrap;">

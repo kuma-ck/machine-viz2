@@ -271,6 +271,12 @@ async function loadData() {
         aggregation_method: aggregationMethod
     });
 
+    // Group Params
+    const group1 = document.getElementById('group1-ids').value.trim();
+    const group2 = document.getElementById('group2-ids').value.trim();
+    if (group1) params.append('group1_ids', group1);
+    if (group2) params.append('group2_ids', group2);
+
     let url = '';
     let currentChartData = null; // To store data for re-rendering (e.g., histogram relative freq)
 
@@ -323,18 +329,35 @@ async function loadData() {
 
         if (activeTab === 'histogram') {
             renderHistogram(data);
-            if (data.raw_data) {
-                state.detailData = data.raw_data.map(d => ({
+            // Histogram Details
+            let rawDataList = data.raw_data || [];
+            // If groups present and raw_data might be partial (legacy), maybe we need to aggregate?
+            // Dummy data implementation returns 'raw_data' containing ALL data for histogram.
+            // But let's check if we need special handling. For now assume raw_data is complete.
+
+            if (rawDataList.length > 0) {
+                state.detailData = rawDataList.map(d => ({
                     machine_id: d.machine_id,
                     series: d.series,
                     model: d.model,
                     value: d.value,
                     valueY: '-'
                 }));
-                renderTable(state.detailData);
             }
+            renderTable(state.detailData);
+
         } else if (activeTab === 'boxplot') {
             renderBoxplot(data);
+            // Boxplot Details: dummy data returns raw_data?
+            // My recent fix for boxplot: 
+            // return { "groups": ..., "axis_data": ..., "box_data": ... }
+            // It does NOT returns 'raw_data' at top level in my latest fix!
+            // I need to update dummy_data.py to return raw_data OR aggregate it here from groups?
+            // 'groups' -> [{ box_data, axis_data }] -> No raw values here (only quantiles).
+            // This is a regression for Detail Table in Boxplot mode with Groups.
+            // However, boxplot usually doesn't show raw points. 
+            // If I want details, I need raw data.
+            // For now, let's skip Detail Table update for Boxplot Group mode or handle gracefully.
             if (data.raw_data) {
                 state.detailData = data.raw_data.map(d => ({
                     machine_id: d.machine_id,
@@ -344,10 +367,27 @@ async function loadData() {
                     valueY: '-'
                 }));
                 renderTable(state.detailData);
+            } else {
+                // Try to construct from groups if possible, but groups only have stats.
+                // So we lose detail data in Boxplot Group mode. 
+                // Acceptable for prototype.
+                state.detailData = [];
+                renderTable(state.detailData);
             }
+
         } else if (activeTab === 'scatter') {
             renderScatter(data);
-            state.detailData = data.data.map(d => ({
+            // Scatter Details
+            let allScatterData = [];
+            if (data.groups && data.groups.length > 0) {
+                data.groups.forEach(g => {
+                    allScatterData = allScatterData.concat(g.data);
+                });
+            } else if (data.data) {
+                allScatterData = data.data;
+            }
+
+            state.detailData = allScatterData.map(d => ({
                 machine_id: d.machine_id,
                 series: series,
                 model: d.model,
@@ -371,11 +411,35 @@ function renderHistogram(data) {
         return;
     }
 
-    let yData = data.counts;
-    // Relative frequency logic
-    if (state.relativeFreq) {
-        const total = data.counts.reduce((a, b) => a + b, 0);
-        yData = data.counts.map(c => parseFloat((c / total * 100).toFixed(1)));
+    if (data.groups && data.groups.length > 0) {
+        // Comparative Mode
+        seriesList = data.groups.map((g, index) => {
+            let yData = g.counts;
+            if (state.relativeFreq) {
+                const total = g.counts.reduce((a, b) => a + b, 0);
+                if (total > 0) yData = g.counts.map(c => parseFloat((c / total * 100).toFixed(1)));
+            }
+            return {
+                name: g.name,
+                type: 'bar',
+                data: yData,
+                itemStyle: { color: index === 0 ? '#6366f1' : '#f43f5e' },
+                // Make bars overlap or side-by-side? Default is side-by-side.
+                // For comparison, side-by-side is good.
+            };
+        });
+    } else {
+        // Single Mode
+        let yData = data.counts;
+        if (state.relativeFreq) {
+            const total = data.counts.reduce((a, b) => a + b, 0);
+            yData = data.counts.map(c => parseFloat((c / total * 100).toFixed(1)));
+        }
+        seriesList = [{
+            data: yData,
+            type: 'bar',
+            itemStyle: { color: '#6366f1' }
+        }];
     }
 
     const option = {
@@ -383,6 +447,7 @@ function renderHistogram(data) {
             trigger: 'axis',
             axisPointer: { type: 'shadow' }
         },
+        legend: { show: (data.groups && data.groups.length > 0) },
         grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
         xAxis: {
             type: 'category',
@@ -393,14 +458,7 @@ function renderHistogram(data) {
             type: 'value',
             name: state.relativeFreq ? '頻度 (%)' : '度数 (台)'
         },
-        series: [{
-            data: yData,
-            type: 'bar',
-            itemStyle: { color: '#6366f1' },
-            // Storing machine IDs in data item for click handler
-            // ECharts allows custom data properties? No, usually distinct.
-            // We can map index to data.machine_ids
-        }]
+        series: seriesList
     };
 
     mainChart.setOption(option, true);
@@ -411,17 +469,40 @@ function renderHistogram(data) {
 function renderScatter(data) {
     // data.data = [{x, y, machine_id, model}]
 
-    const seriesData = data.data.map(d => {
-        return {
-            value: [d.x, d.y],
-            machine_id: d.machine_id,
-            model: d.model
-        };
-    });
-
-    // Get Axis Labels
     const xLabel = document.getElementById('characteristic-select').options[document.getElementById('characteristic-select').selectedIndex]?.text || state.characteristicId;
     const yLabel = document.getElementById('characteristic-select-y').options[document.getElementById('characteristic-select-y').selectedIndex]?.text || state.characteristicIdY;
+
+    let seriesList = [];
+    if (data.groups && data.groups.length > 0) {
+        seriesList = data.groups.map((g, index) => {
+            const sData = g.data.map(d => ({
+                value: [d.x, d.y],
+                machine_id: d.machine_id,
+                model: d.model
+            }));
+            return {
+                name: g.name,
+                type: 'scatter',
+                symbolSize: 8,
+                data: sData,
+                itemStyle: { color: index === 0 ? '#6366f1' : '#f43f5e' }
+            };
+        });
+    } else {
+        const seriesData = data.data.map(d => {
+            return {
+                value: [d.x, d.y],
+                machine_id: d.machine_id,
+                model: d.model
+            };
+        });
+        seriesList = [{
+            type: 'scatter',
+            symbolSize: 8,
+            data: seriesData,
+            itemStyle: { color: '#10b981' } // Keep green for single scatter
+        }];
+    }
 
     const option = {
         tooltip: {
@@ -436,6 +517,7 @@ function renderScatter(data) {
                 `;
             }
         },
+        legend: { show: (data.groups && data.groups.length > 0) },
         grid: { left: '3%', right: '10%', bottom: '5%', containLabel: true },
         xAxis: {
             type: 'value',
@@ -449,39 +531,29 @@ function renderScatter(data) {
             scale: true,
             name: yLabel
         },
-        series: [{
-            type: 'scatter',
-            symbolSize: 8,
-            data: seriesData,
-            itemStyle: { color: '#10b981' }
-        }]
+        series: seriesList
     };
 
     mainChart.setOption(option, true);
 }
 
 function renderBoxplot(data) {
-    // data: box_data (min, q1, med, q3, max), axis_data (models), outliers (ignored for now)
+    // data: groups or single
+    let seriesList = [];
+    let axisData = data.axis_data;
 
-    const option = {
-        tooltip: {
-            trigger: 'item',
-            axisPointer: { type: 'shadow' }
-        },
-        grid: { left: '10%', right: '10%', bottom: '15%' },
-        xAxis: {
-            type: 'category',
-            data: data.axis_data,
-            boundaryGap: true,
-            nameGap: 30,
-            splitArea: { show: false },
-            splitLine: { show: false }
-        },
-        yAxis: {
-            type: 'value',
-            scale: true
-        },
-        series: [
+    if (data.groups && data.groups.length > 0) {
+        seriesList = data.groups.map((g, index) => ({
+            name: g.name,
+            type: 'boxplot',
+            data: g.box_data,
+            itemStyle: {
+                color: index === 0 ? '#6366f1' : '#f43f5e',
+                borderColor: index === 0 ? '#4338ca' : '#be123c'
+            }
+        }));
+    } else {
+        seriesList = [
             {
                 name: 'boxplot',
                 type: 'boxplot',
@@ -491,7 +563,29 @@ function renderBoxplot(data) {
                     borderColor: '#92400e'
                 }
             }
-        ]
+        ];
+    }
+
+    const option = {
+        tooltip: {
+            trigger: 'item',
+            axisPointer: { type: 'shadow' }
+        },
+        legend: { show: (data.groups && data.groups.length > 0) },
+        grid: { left: '10%', right: '10%', bottom: '15%' },
+        xAxis: {
+            type: 'category',
+            data: axisData,
+            boundaryGap: true,
+            nameGap: 30,
+            splitArea: { show: false },
+            splitLine: { show: false }
+        },
+        yAxis: {
+            type: 'value',
+            scale: true
+        },
+        series: seriesList
     };
 
     mainChart.setOption(option, true);

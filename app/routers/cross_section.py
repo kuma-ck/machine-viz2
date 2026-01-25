@@ -33,7 +33,9 @@ async def get_histogram(
     model: Optional[str] = None, # Optional: filter by specific model
     aggregation_method: str = "latest",
     bins: Optional[int] = 20,
-    bin_width: Optional[float] = None
+    bin_width: Optional[float] = None,
+    group1_ids: Optional[str] = None,
+    group2_ids: Optional[str] = None
 ):
     """ヒストグラムデータ取得"""
     models = [model] if model else []
@@ -49,7 +51,9 @@ async def get_histogram(
         aggregation_method=aggregation_method,
 
         bins_count=bins,
-        bin_width=bin_width
+        bin_width=bin_width,
+        group1_ids=group1_ids,
+        group2_ids=group2_ids
     )
 
 @router.get("/api/scatter")
@@ -63,7 +67,9 @@ async def get_scatter(
     category_y: str,
     id_y: str,
     agg_y: str,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    group1_ids: Optional[str] = None,
+    group2_ids: Optional[str] = None
 ):
     """散布図データ取得"""
     models = [model] if model else []
@@ -79,7 +85,9 @@ async def get_scatter(
         agg_x=agg_x,
         category_y=category_y,
         id_y=id_y,
-        agg_y=agg_y
+        agg_y=agg_y,
+        group1_ids=group1_ids,
+        group2_ids=group2_ids
     )
 
 @router.get("/api/boxplot")
@@ -90,6 +98,8 @@ async def get_boxplot(
     category: str,
     characteristic_id: str,
     aggregation_method: str = "latest",
+    group1_ids: Optional[str] = None,
+    group2_ids: Optional[str] = None
 ):
     """箱ひげ図データ取得"""
     # Boxplot shows distribution per Model, so we don't filter by single model usually,
@@ -103,5 +113,7 @@ async def get_boxplot(
         end_date=end_date,
         category=category,
         characteristic_id=characteristic_id,
-        aggregation_method=aggregation_method
+        aggregation_method=aggregation_method,
+        group1_ids=group1_ids,
+        group2_ids=group2_ids
     )

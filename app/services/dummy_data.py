@@ -735,9 +735,10 @@ def _generate_raw_values(
     category: str,
     characteristic_id: str,
     aggregation_method: str = "latest",
+    shift_mean: float = 0.0 # For dummy comparison
 ) -> List[Dict[str, Any]]:
     """断面データ用の生データを一括生成"""
-    seed_str = f"{series}_{models}_{start_date}_{end_date}_{category}_{characteristic_id}_{aggregation_method}_cross"
+    seed_str = f"{series}_{models}_{start_date}_{end_date}_{category}_{characteristic_id}_{shift_mean}_{aggregation_method}_cross"
     rng = random.Random(seed_str)
     
     # 機種リスト
@@ -750,26 +751,38 @@ def _generate_raw_values(
     results = []
     
     # 値の基準を作成
-    base_mean = 50
-    base_std = 10
+    mean_val = 50.0 + shift_mean
+    std_val = 15.0
     
     # 特性IDによって基準を変える
-    if characteristic_id == "温度": base_mean, base_std = 25, 5
-    elif characteristic_id == "湿度": base_mean, base_std = 50, 15
-    elif characteristic_id == "圧力": base_mean, base_std = 100, 10
-    elif characteristic_id == "振動": base_mean, base_std = 0.5, 0.2
+    if characteristic_id == "温度":
+        mean_val = 25.0 + shift_mean
+        std_val = 5.0
+    elif characteristic_id == "湿度":
+        mean_val = 50.0 + shift_mean
+        std_val = 15.0
+    elif characteristic_id == "圧力":
+        mean_val = 100.0 + shift_mean
+        std_val = 10.0
+    elif characteristic_id == "振動":
+        mean_val = 0.5 + shift_mean
+        std_val = 0.2
+    else:
+        # IDハッシュによる変動
+        mean_val += (hash(characteristic_id) % 30)
+        std_val += (hash(characteristic_id) % 10)
     
     for _ in range(count):
         model = rng.choice(available_models)
         machine_id = f"{series}-{model}-{rng.randint(1000, 9999)}"
         
         # モデルごとの個体差を加える
-        model_bias = available_models.index(model) * (base_std * 0.5)
+        model_bias = available_models.index(model) * (std_val * 0.5)
         
-        val = rng.gauss(base_mean + model_bias, base_std)
+        val = rng.gauss(mean_val + model_bias, std_val)
         # 異常値の混入 (1%確率)
         if rng.random() < 0.01:
-            val += rng.choice([-1, 1]) * base_std * 3
+            val += rng.choice([-1, 1]) * std_val * 3
             
         results.append({
             "machine_id": machine_id,
@@ -790,89 +803,114 @@ def get_cross_section_histogram(
     characteristic_id: str,
     aggregation_method: str = "latest",
     bin_width: Optional[float] = None,
-    bins_count: int = 20
+    bins_count: int = 20,
+    group1_ids: Optional[str] = None,
+    group2_ids: Optional[str] = None
 ) -> Dict[str, Any]:
     """ヒストグラム用データを取得"""
     raw_data = _generate_raw_values(series, models, start_date, end_date, category, characteristic_id, aggregation_method)
     
-    values = [d["value"] for d in raw_data]
-    if not values:
-        return {"bins": [], "counts": [], "machine_ids": [], "raw_data": []}
-        
-    min_val = min(values)
-    max_val = max(values)
-    
-    bins = [] # range labels
-    counts = []
-    machine_ids = [] # list of lists
+    # グループ比較ロジック
+    groups_data = []
+    if group1_ids or group2_ids:
+        # グループ比較モード
+        # ダミーデータなので、入力されたIDに関わらず、意図的に分布をずらしたデータを生成して返す
+        # Group 1
+        if group1_ids:
+            # 実際のIDフィルタリング（ダミーでは意味ないがロジックとして）
+            # g1_ids_list = [x.strip() for x in group1_ids.split(',')]
+            # 意図的にシフトさせる
+            g1_raw = _generate_raw_values(series, models, start_date, end_date, category, characteristic_id, aggregation_method, shift_mean=0)
+            groups_data.append({"name": "Group 1", "data": g1_raw})
+            
+        # Group 2
+        if group2_ids:
+            g2_raw = _generate_raw_values(series, models, start_date, end_date, category, characteristic_id, aggregation_method, shift_mean=10) # Shifted
+            groups_data.append({"name": "Group 2", "data": g2_raw})
+            
+    if not groups_data:
+        # 通常モード
+        groups_data.append({"name": "All", "data": raw_data})
 
+    # 全データの範囲でビンを決定
+    all_values = []
+    for g in groups_data:
+        all_values.extend([d["value"] for d in g["data"]])
+    
+    if not all_values:
+         return {"bins": [], "counts": [], "machine_ids": [], "raw_data": [], "groups": []}
+
+    min_val = min(all_values)
+    max_val = max(all_values)
+    
+    # 共通のビン定義を作成
+    bins = []
     if bin_width:
-        # Bin Width Mode
         import math
-        # Start from a nice number below min_val if possible? 
-        # For simplicity, start from floor(min_val) or just min_val
-        # Let's align to 0 if relevant? 
-        # Simple approach: start at floor(min_val)
         start = math.floor(min_val)
-        
         current_lower = start
-        # Limit loop to avoid infinite in case of bad input
-        max_bins = 100 
-        loop_count = 0
-        
-        # Determine upper bound to cover max_val
-        # We need to cover up to max_val + margin maybe?
-        # Just cover max_val
-        
-        while current_lower < max_val + (bin_width * 0.1): # Ensure coverage
+        while current_lower < max_val + (bin_width * 0.1):
             upper = current_lower + bin_width
             bins.append(f"{current_lower:.2f} - {upper:.2f}")
-            
-            # Count
-            in_bin = [d for d in raw_data if current_lower <= d["value"] < upper]
-            # Verify closure for last element? 
-            # With bin width, strictly [lower, upper) is usually fine, but max value edge case needs care.
-            # If d["value"] == upper and it's the max... usually it goes to next bin.
-            # Let's stick to < upper.
-            
-            counts.append(len(in_bin))
-            machine_ids.append([d["machine_id"] for d in in_bin])
-            
             current_lower = upper
-            loop_count += 1
-            if loop_count > max_bins: break
-
     else:
-        # Bin Count Mode (Existing logic)
-        # 範囲を少し広げる
         margin = (max_val - min_val) * 0.05
         if margin == 0: margin = 1
-        min_val -= margin
-        max_val += margin
-        
-        bins_count = bins_count or 20 # Fallback
-        step = (max_val - min_val) / bins_count
-        
+        min_val_margin = min_val - margin
+        max_val_margin = max_val + margin
+        step = (max_val_margin - min_val_margin) / bins_count
         for i in range(bins_count):
-            lower = min_val + step * i
-            upper = min_val + step * (i + 1)
-            bins.append(f"{lower:.2f} - {upper:.2f}")
-            
-            in_bin = [d for d in raw_data if lower <= d["value"] < upper]
-            # 最後のビンは閉区間
-            if i == bins_count - 1:
-                in_bin = [d for d in raw_data if lower <= d["value"] <= upper]
-                
-            counts.append(len(in_bin))
-            machine_ids.append([d["machine_id"] for d in in_bin])
+            lower = min_val_margin + i * step
+            upper = min_val_margin + (i + 1) * step
+            bins.append(f"{lower:.1f} - {upper:.1f}")
+
+    # 各グループごとのカウント計算
+    result_groups = []
+    
+    for g in groups_data:
+        g_counts = [0] * len(bins)
+        g_machine_ids = [[] for _ in range(len(bins))]
         
+        for d in g["data"]:
+            val = d["value"]
+            # Find bin index
+            bin_idx = -1
+            if bin_width:
+                start = math.floor(min(all_values)) # Re-calculate start same as above
+                idx = math.floor((val - start) / bin_width)
+                if 0 <= idx < len(bins):
+                    bin_idx = idx
+            else:
+                # Bin count logic
+                if step > 0:
+                    idx = int((val - min_val_margin) / step)
+                    if 0 <= idx < len(bins):
+                        bin_idx = idx
+                    elif idx == len(bins) and val <= max_val_margin: # Edge case
+                         bin_idx = len(bins) - 1
+
+            if bin_idx != -1:
+                g_counts[bin_idx] += 1
+                g_machine_ids[bin_idx].append(d["machine_id"])
+                
+        result_groups.append({
+            "name": g["name"],
+            "counts": g_counts,
+            "machine_ids": g_machine_ids
+        })
+
+    # For backward compatibility / default view, return the first group's data as top-level if only 1 group (All)
+    # But for comparison, frontend should look at 'groups'
+    
     return {
+        "groups": result_groups, # New standard for comparison
         "bins": bins,
-        "counts": counts,
-        "machine_ids": machine_ids, # フロントでクリック時にリスト表示するためのIDリスト
-        "raw_data_sample": raw_data[:10], # デバッグ用
-        "raw_data": raw_data  # 全データ
+        # Legacy support for initial view (shows Group 1 or All)
+        "counts": result_groups[0]["counts"], 
+        "machine_ids": result_groups[0]["machine_ids"]
     }
+
+
 
 
 def get_cross_section_scatter(
@@ -886,57 +924,73 @@ def get_cross_section_scatter(
     category_y: str,
     id_y: str,
     agg_y: str,
+    group1_ids: Optional[str] = None,
+    group2_ids: Optional[str] = None,
 ) -> Dict[str, Any]:
     """散布図用データを取得"""
-    # XとYで別々のデータを生成するが、Machine IDは一致させる必要がある
-    # そのため、まずMachine IDのリストを確定させ、そのIDに対して値を生成するロジックが必要
-    # しかし _generate_raw_values はランダムにIDを生成しているため、一致しない可能性がある
     
-    # 解決策: Machine ID生成ロジックを分離するか、ここで一括生成する
-    
-    # シードに軸のIDを含めることで、変数が変わればデータも変わるようにする
-    seed_str = f"{series}_{models}_{start_date}_{end_date}_{category_x}_{id_x}_{category_y}_{id_y}_scatter_ids"
-    rng = random.Random(seed_str)
-    
-    available_models = models if models else MODEL_NUMBERS.get(series, ["Unknown"])
-    count = rng.randint(100, 500)
-    
-    data = []
-    
-    # X軸の設定 (IDに基づいてベース値を変動させる)
-    base_mean_x = 50 + (hash(id_x) % 50)
-    base_std_x = 5 + (hash(id_x) % 15)
-    
-    # Y軸の設定
-    base_mean_y = 50 + (hash(id_y) % 50)
-    base_std_y = 5 + (hash(id_y) % 15)
-    
-    # 相関係数を適当に設定 (-1.0 ~ 1.0)
-    # シードに基づいて固定
-    correlation = rng.uniform(-0.8, 0.8)
-    
-    for _ in range(count):
-        model = rng.choice(available_models)
-        machine_id = f"{series}-{model}-{rng.randint(1000, 9999)}"
+    groups_config = []
+    if group1_ids or group2_ids:
+        if group1_ids: groups_config.append({"name": "Group 1", "shift": 0})
+        if group2_ids: groups_config.append({"name": "Group 2", "shift": 20}) # Shift both X and Y? Or just one?
+    else:
+        groups_config.append({"name": "All", "shift": 0})
         
-        # X値生成
-        val_x = rng.gauss(base_mean_x, base_std_x)
+    result_groups = []
+    
+    for g in groups_config:
+        shift = g["shift"]
+        # シードに軸のIDとシフトを含める
+        seed_str = f"{series}_{models}_{start_date}_{end_date}_{category_x}_{id_x}_{category_y}_{id_y}_{shift}_scatter_ids"
+        rng = random.Random(seed_str)
         
-        # Y値生成 (相関を持たせる)
-        # y = correlation * x + noise
-        # 正規化してから相関適用して戻す簡易ロジック
-        norm_x = (val_x - base_mean_x) / base_std_x
-        norm_y = correlation * norm_x + rng.gauss(0, (1 - abs(correlation)**2)**0.5)
-        val_y = norm_y * base_std_y + base_mean_y
+        available_models = models if models else MODEL_NUMBERS.get(series, ["Unknown"])
+        count = rng.randint(100, 300) # Slightly less per group
         
-        data.append({
-            "machine_id": machine_id,
-            "x": round(val_x, 2),
-            "y": round(val_y, 2),
-            "model": model
+        data = []
+        
+        # X軸の設定 (IDに基づいてベース値を変動させる)
+        base_mean_x = 50 + (hash(id_x) % 50) + shift
+        base_std_x = 5 + (hash(id_x) % 15)
+        
+        # Y軸の設定
+        base_mean_y = 50 + (hash(id_y) % 50) + shift
+        base_std_y = 5 + (hash(id_y) % 15)
+        
+        # 相関係数
+        correlation = rng.uniform(-0.8, 0.8)
+        
+        for _ in range(count):
+            model = rng.choice(available_models)
+            machine_id = f"{series}-{model}-{rng.randint(1000, 9999)}"
+            
+            # X値生成
+            val_x = rng.gauss(base_mean_x, base_std_x)
+            
+            # Y値生成
+            norm_x = (val_x - base_mean_x) / base_std_x
+            norm_y = correlation * norm_x + rng.gauss(0, (1 - abs(correlation)**2)**0.5)
+            val_y = norm_y * base_std_y + base_mean_y
+            
+            data.append({
+                "machine_id": machine_id,
+                "x": round(val_x, 2),
+                "y": round(val_y, 2),
+                "model": model
+            })
+        
+        result_groups.append({
+            "name": g["name"],
+            "data": data,
+            "correlation": round(correlation, 3)
         })
-        
-    return {"data": data, "correlation": round(correlation, 3)}
+
+    # Legacy support
+    return {
+        "groups": result_groups,
+        "data": result_groups[0]["data"], 
+        "correlation": result_groups[0]["correlation"]
+    }
 
 
 def get_cross_section_boxplot(
@@ -947,51 +1001,58 @@ def get_cross_section_boxplot(
     category: str,
     characteristic_id: str,
     aggregation_method: str = "latest",
-    bins_count: int = 20,
-    bin_width: Optional[float] = None
+    group1_ids: Optional[str] = None,
+    group2_ids: Optional[str] = None,
 ) -> Dict[str, Any]:
     """箱ひげ図用データを取得"""
-    raw_data = _generate_raw_values(series, models, start_date, end_date, category, characteristic_id, aggregation_method)
     
-    # 機種ごとにグループ化
-    grouped = {}
-    for d in raw_data:
-        m = d["model"]
-        if m not in grouped: grouped[m] = []
-        grouped[m].append(d["value"])
-        
-    # 各グループの統計量を計算
-    boxplot_data = []
-    axis_data = [] # モデル名
+    # Boxplot data generation needs to handle groups
+    groups_config = []
+    if group1_ids or group2_ids:
+        if group1_ids: groups_config.append({"name": "Group 1", "shift": 0})
+        if group2_ids: groups_config.append({"name": "Group 2", "shift": 15})
+    else:
+        groups_config.append({"name": "All", "shift": 0})
     
-    for model in sorted(grouped.keys()):
-        vals = sorted(grouped[model])
-        if not vals: continue
+    result_groups = []
+    # Ensure consistent axis models
+    axis_data = sorted(MODEL_NUMBERS.get(series, ["M-001", "M-002", "M-003"]))
+    
+    for g in groups_config:
+        box_data = []
         
-        # Boxplot data: [min, Q1, median, Q3, max]
-        q1 = statistics.quantiles(vals, n=4)[0]
-        median = statistics.median(vals)
-        q3 = statistics.quantiles(vals, n=4)[2]
-        iqr = q3 - q1
-        
-        lower_fence = q1 - 1.5 * iqr
-        upper_fence = q3 + 1.5 * iqr
-        
-        # Outliers filtering for whiskers
-        non_outliers = [v for v in vals if lower_fence <= v <= upper_fence]
-        if not non_outliers:
-             min_val, max_val = min(vals), max(vals)
-        else:
-             min_val, max_val = min(non_outliers), max(non_outliers)
-             
-        # ECharts boxplot format
-        boxplot_data.append([min_val, q1, median, q3, max_val])
-        axis_data.append(model)
-        
+        for model in axis_data:
+            # Generate raw data for this model
+            raw = _generate_raw_values(series, [model], start_date, end_date, category, characteristic_id, aggregation_method, shift_mean=g["shift"])
+            values = [d["value"] for d in raw]
+            
+            if not values:
+                 box_data.append([0, 0, 0, 0, 0])
+                 continue
+                 
+            values.sort()
+            
+            # Simple Quartile Calculation
+            if len(values) > 0:
+                n = len(values)
+                min_v = values[0]
+                max_v = values[-1]
+                q1 = values[int(n * 0.25)]
+                q2 = values[int(n * 0.50)]
+                q3 = values[int(n * 0.75)]
+                box_data.append([min_v, q1, q2, q3, max_v])
+            else:
+                box_data.append([0, 0, 0, 0, 0])
+            
+        result_groups.append({
+            "name": g["name"],
+            "box_data": box_data,
+            "axis_data": axis_data
+        })
+            
     return {
+        "groups": result_groups,
         "axis_data": axis_data,
-        "box_data": boxplot_data,
-        "outliers": [], # 簡易化のため省略
-        "raw_data": raw_data
+        "box_data": result_groups[0]["box_data"]
     }
 
