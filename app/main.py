@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import init_db, get_db
-from app.routers import history, search, defect_trend, patrol_result, data_catalog, auth, cross_section
+from app.routers import history, search, defect_trend, patrol_result, data_catalog, auth, cross_section, analysis
 from app.routers.auth import get_current_user
 
 settings = get_settings()
@@ -45,7 +45,8 @@ protected_routers = [
     defect_trend.router,
     patrol_result.router,
     data_catalog.router,
-    cross_section.router
+    cross_section.router,
+    analysis.router
 ]
 
 for router in protected_routers:

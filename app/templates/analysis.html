@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}不具合要因解析 (Mona) - Mona{% endblock %}
+
+{% block head %}
+<style>
+    .upload-area {
+        border: 2px dashed var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 2rem;
+        text-align: center;
+        background: var(--bg-secondary);
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .upload-area:hover,
+    .upload-area.dragover {
+        border-color: var(--primary-color);
+        background: rgba(99, 102, 241, 0.05);
+        /* Indigo tint */
+    }
+
+    .analysis-container {
+        display: none;
+        /* Hidden until loaded */
+        margin-top: 2rem;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        /* Initially hidden via JS explicitly or d-none class if needed, 
+           but we use inline style display:none in parent or handle in JS */
+    }
+
+    .ranking-panel {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        height: 600px;
+        overflow-y: auto;
+    }
+
+    .chart-panel {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        height: 600px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .rank-row {
+        cursor: pointer;
+        padding: 8px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .rank-row:hover,
+    .rank-row.active {
+        background-color: var(--bg-hover);
+    }
+
+    .rank-row.active {
+        background-color: #e0e7ff;
+        /* Darker indigo tint */
+        border-left: 4px solid var(--primary-color);
+        padding-left: 10px;
+        /* Adjust padding to compensate border if needed, usually border takes space */
+    }
+
+    .score-bar-bg {
+        width: 100px;
+        height: 8px;
+        background: #eee;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .score-bar-fill {
+        height: 100%;
+        background: var(--primary-color);
+    }
+
+    /* Loading Overlay */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        flex-direction: column;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <h2>不具合要因解析 (Mona Analytics)</h2>
+    <p class="text-secondary">データセットをアップロードして、不具合(Defect)に影響を与える要因を自動解析します。</p>
+</div>
+
+<!-- Upload Section -->
+<div class="card" style="margin-bottom: 2rem; padding: 1.5rem;">
+    <!-- Mode Selection -->
+    <div style="margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <label style="font-weight: bold; min-width: 80px;">解析モード:</label>
+        <select id="mode-select" class="form-select" style="max-width: 300px;">
+            <option value="auto" selected>✨ 自動選択 (推奨)</option>
+            <option value="Exploration">① 探索モード (N &lt; 30)</option>
+            <option value="Quasi-Stat">② 準統計モード (30 &le; N &lt; 100)</option>
+            <option value="Standard">③ 標準モード (100 &le; N &lt; 300)</option>
+            <option value="AI Analysis">④ AI解析モード (N &ge; 300)</option>
+        </select>
+        <div id="mode-desc" class="text-secondary" style="font-size: 0.85rem;">
+            サンプル数(不具合データ数)に応じて、最適な統計手法・アルゴリズムを自動で選択します。
+        </div>
+    </div>
+
+    <div id="upload-section" class="upload-area">
+        <i data-lucide="upload-cloud"
+            style="width: 48px; height: 48px; color: var(--text-secondary); margin-bottom: 1rem;"></i>
+        <p><strong>クリックしてファイルを選択</strong> または ドラッグ＆ドロップ</p>
+        <p class="text-secondary" style="font-size: 0.9rem;">CSV, Excel, Parquet (Max: 100MB)</p>
+        <input type="file" id="file-input" style="display: none;" accept=".csv, .xlsx, .xls, .parquet">
+    </div>
+</div>
+
+<!-- Loading -->
+<div id="loading" class="loading-overlay">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p style="margin-top: 1rem; font-weight: bold;">AI解析実行中...</p>
+    <p class="text-secondary" style="font-size: 0.9rem;">データ量により数分かかる場合があります</p>
+</div>
+
+<!-- Result Section -->
+<div id="result-section" style="display: none; margin-top: 2rem;">
+
+    <!-- Help / Guide -->
+    <div class="alert alert-info"
+        style="margin-bottom: 2rem; border-left: 4px solid var(--primary-color); background: #f0f7ff; padding: 1rem; border-radius: var(--radius-sm);">
+        <h5 style="margin-top: 0; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="info" style="width: 16px; height: 16px;"></i> 結果の見方
+        </h5>
+        <ul style="font-size: 0.9rem; margin-bottom: 0; padding-left: 1.2rem;">
+            <li><strong>要因ランキング:</strong> 不具合発生に寄与している可能性が高い順に表示されます。</li>
+            <li><strong>影響度 (Score):</strong> 0に近いほど関連が薄く、数字が大きいほど影響大です。(モードにより指標は異なります)</li>
+            <li><strong>方向性 (Direction):</strong>
+                <ul>
+                    <li><span style="color:#ef4444;">⬆ NG</span>: その値が「高い」と不具合になりやすい</li>
+                    <li><span style="color:#3b82f6;">⬇ NG</span>: その値が「低い」と不具合になりやすい</li>
+                </ul>
+            </li>
+            <li><strong>詳細分析 (グラフ):</strong> 正常品(0)と不具合品(1)で、値の分布にどのような差があるかを確認できます。箱ひげ図の「箱」の位置がずれているほど、明確な差があります。</li>
+        </ul>
+    </div>
+
+    <!-- Summary Cards -->
+    <div style="margin-bottom: 1rem;">
+        <span class="badge bg-light text-dark"
+            style="border: 1px solid #ccc; padding: 0.5rem 1rem; border-radius: 20px; font-weight: bold;">
+            📂 File: <span id="res_filename">-</span>
+        </span>
+    </div>
+
+    <!-- Summary Cards -->
+    <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+        <div class="card" style="padding: 1rem; flex: 1;">
+            <div class="text-secondary" style="font-size: 0.8rem;">解析モード</div>
+            <div id="res_mode" style="font-size: 1.2rem; font-weight: bold; color: var(--primary-color);"></div>
+        </div>
+        <div class="card" style="padding: 1rem; flex: 1;">
+            <div class="text-secondary" style="font-size: 0.8rem;">不具合データ数 (N)</div>
+            <div id="res_n_defect" style="font-size: 1.2rem; font-weight: bold;"></div>
+        </div>
+        <div class="card" style="padding: 1rem; flex: 1;">
+            <div class="text-secondary" style="font-size: 0.8rem;">Top 変数</div>
+            <div id="res_top_var" style="font-size: 1.2rem; font-weight: bold;"></div>
+        </div>
+    </div>
+
+    <div class="analysis-container" style="display: grid;">
+        <!-- Ranking List -->
+        <div class="ranking-panel">
+            <h4 style="margin-bottom: 1rem;">要因ランキング (Top 20)</h4>
+            <div id="ranking-list">
+                <!-- JS Populated -->
+            </div>
+        </div>
+
+        <!-- Detail Charts -->
+        <div class="chart-panel">
+            <h4 class="chart-header-title">詳細分析: <span id="selected-var-name">-</span></h4>
+            <div id="viz-container" style="flex: 1; width: 100%;"></div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/analysis.js"></script>
+{% endblock %}

@@ -43,6 +43,9 @@
                 class="navbar-item {% if request.url.path.startswith('/data-catalog') %}active{% endif %}">
                 <i data-lucide="database"></i> データカタログ
             </a>
+            <a href="/analysis" class="navbar-item {% if request.url.path.startswith('/analysis') %}active{% endif %}">
+                <i data-lucide="microscope"></i> 要因解析
+            </a>
         </div>
         <div class="navbar-end">
             <!-- Theme Toggle -->
