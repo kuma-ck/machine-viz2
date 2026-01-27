@@ -53,6 +53,8 @@ for router in protected_routers:
     app.include_router(router, dependencies=[Depends(get_current_user)])
 
 
+from fastapi.exception_handlers import http_exception_handler
+
 @app.exception_handler(HTTPException)
 async def auth_exception_handler(request: Request, exc: HTTPException):
     """認証エラー時のハンドラ（ログイン画面へリダイレクト）"""
@@ -62,7 +64,7 @@ async def auth_exception_handler(request: Request, exc: HTTPException):
              return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
         
         return RedirectResponse(url=f"/login")
-    return await app.http_exception_handler(request, exc)
+    return await http_exception_handler(request, exc)
 
 
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(get_current_user)])

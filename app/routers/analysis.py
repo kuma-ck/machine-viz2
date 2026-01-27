@@ -26,6 +26,10 @@ class NpEncoder(json.JSONEncoder):
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):
+            if np.isnan(obj):
+                return None
+            if np.isinf(obj):
+                return None
             return float(obj)
         if isinstance(obj, np.ndarray):
             return obj.tolist()
@@ -56,7 +60,12 @@ async def analyze_file(
         result["filename"] = file.filename
         
         json_str = json.dumps(result, cls=NpEncoder)
-        return JSONResponse(content=json.loads(json_str))
+        # Sanitize NaN/Infinity by parsing them as None
+        safe_result = json.loads(
+            json_str, 
+            parse_constant=lambda x: None
+        )
+        return JSONResponse(content=safe_result)
 
     except Exception as e:
         import traceback
