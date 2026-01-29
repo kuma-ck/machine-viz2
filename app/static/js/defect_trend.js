@@ -651,3 +651,186 @@ function renderPagination() {
     if (prevBtn) prevBtn.disabled = (page <= 1);
     if (nextBtn) nextBtn.disabled = (page >= totalPages);
 }
+
+
+// ----------------------------------------------------------------
+// Analysis Integration
+// ----------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+    const analyzeBtn = document.getElementById('analyze-btn');
+    const modal = document.getElementById('analysis-modal');
+    const closeBtn = document.getElementById('close-modal-btn');
+    const cancelBtn = document.getElementById('cancel-analysis');
+    const runBtn = document.getElementById('run-analysis-btn');
+    const container = document.getElementById('characteristics-container');
+
+    let characteristicsLoaded = false;
+
+    if (analyzeBtn && modal) {
+        analyzeBtn.addEventListener('click', async () => {
+            // Check if series selected
+            const series = document.getElementById('series-select').value;
+            if (!series) {
+                showToast('解析を実行するには、シリーズを選択・更新してください', 'warning');
+                return;
+            }
+
+            modal.classList.remove('hidden');
+            if (!characteristicsLoaded) {
+                await loadCharacteristics();
+            }
+        });
+
+        const closeModal = () => modal.classList.add('hidden');
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+
+        runBtn.addEventListener('click', executeAnalysis);
+    }
+
+    async function loadCharacteristics() {
+        const loading = document.getElementById('loading-characteristics');
+        container.innerHTML = '';
+        loading.style.display = 'block';
+
+        try {
+            const res = await fetch('/analysis/api/characteristics');
+            if (!res.ok) throw new Error('Failed to load');
+            const data = await res.json();
+
+            renderCharacteristics(data);
+            characteristicsLoaded = true;
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = '<p class="text-error">特性値リストの読み込みに失敗しました</p>';
+        } finally {
+            loading.style.display = 'none';
+        }
+    }
+
+    function renderCharacteristics(data) {
+        container.innerHTML = '';
+
+        data.forEach(group => {
+            const groupDiv = document.createElement('div');
+            groupDiv.innerHTML = `<h4 style="margin: 10px 0 5px; font-size: 0.9rem; color: #666;">${group.category}</h4>`;
+
+            const listDiv = document.createElement('div');
+            listDiv.style.display = 'grid';
+            listDiv.style.gridTemplateColumns = 'repeat(auto-fill, minmax(140px, 1fr))';
+            listDiv.style.gap = '5px';
+
+            // Quantitative
+            group.quantitative.forEach(id => {
+                const item = createCharCheckbox(group.category, id);
+                listDiv.appendChild(item);
+            });
+
+            // Qualitative (ignore for now? or include?)
+            // Implementation plan mainly focuses on stats, but analysis logic handles strings?
+            // Let's include them.
+            group.qualitative.forEach(id => {
+                const item = createCharCheckbox(group.category, id);
+                listDiv.appendChild(item);
+            });
+
+            groupDiv.appendChild(listDiv);
+            container.appendChild(groupDiv);
+        });
+
+        updateSelectionCount();
+    }
+
+    function createCharCheckbox(category, id) {
+        const label = document.createElement('label');
+        label.className = 'checkbox-label';
+        label.style.display = 'flex';
+        label.style.alignItems = 'center';
+        label.style.fontSize = '0.85rem';
+        label.style.cursor = 'pointer';
+
+        const key = `${category}__${id}`;
+        // Default select some? No.
+
+        label.innerHTML = `
+            <input type="checkbox" class="char-select" value="${key}" style="margin-right: 5px;">
+            ${id}
+        `;
+
+        label.querySelector('input').addEventListener('change', updateSelectionCount);
+        return label;
+    }
+
+    function updateSelectionCount() {
+        const checked = document.querySelectorAll('.char-select:checked');
+        const count = checked.length;
+        const countSpan = document.getElementById('selected-count');
+        const runBtn = document.getElementById('run-analysis-btn');
+
+        countSpan.textContent = count;
+
+        if (count > 0 && count <= 20) {
+            runBtn.disabled = false;
+            countSpan.style.color = 'inherit';
+        } else {
+            runBtn.disabled = true;
+            if (count > 20) countSpan.style.color = 'red';
+        }
+    }
+
+    async function executeAnalysis() {
+        // Collect Main Filters
+        const series = document.getElementById('series-select').value;
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+        const category = document.getElementById('category-select').value;
+        const code = document.getElementById('code-select').value;
+
+        const selectedModels = Array.from(document.querySelectorAll('.model-checkbox:checked'))
+            .map(cb => cb.value);
+
+        // Collect Characteristics
+        const selectedChars = Array.from(document.querySelectorAll('.char-select:checked'))
+            .map(cb => cb.value);
+
+        const payload = {
+            series: series,
+            models: selectedModels,
+            start_date: startDate,
+            end_date: endDate,
+            defect_categories: category ? [category] : [],
+            defect_code: code,
+            characteristic_ids: selectedChars
+        };
+
+        // Show Loading (Reuse toast or disable button)
+        const runBtn = document.getElementById('run-analysis-btn');
+        runBtn.disabled = true;
+        runBtn.textContent = '解析中...';
+
+        try {
+            const res = await fetch('/analysis/api/from_trend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Analysis failed');
+            }
+
+            const result = await res.json();
+
+            // Store result and redirect
+            sessionStorage.setItem('analysis_result_cache', JSON.stringify(result));
+            window.location.href = '/analysis';
+
+        } catch (e) {
+            console.error(e);
+            showToast(`エラー: ${e.message}`, 'error');
+            runBtn.disabled = false;
+            runBtn.textContent = '解析実行';
+        }
+    }
+});

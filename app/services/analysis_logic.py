@@ -185,7 +185,7 @@ def analyze_dataset(df: pd.DataFrame, target_col: str = "defect_flag", manual_mo
         else:
              raise ValueError("Target column not specified and could not be auto-detected.")
 
-    X, y, _ = preprocess_data(df, target_col)
+    X, y, X_raw = preprocess_data(df, target_col)
     
     n_defect = y.sum()
     n_total = len(y)
@@ -219,6 +219,32 @@ def analyze_dataset(df: pd.DataFrame, target_col: str = "defect_flag", manual_mo
         # Fallback for unknown mode string if any
         mode = MODE_STANDARD
         results = run_standard_mode(X, y)
+
+    # Attach N_valid / N_missing to results
+    missing_map = X_raw.isna().sum().to_dict()
+    
+    for item in results:
+        var_name = item["variable"]
+        if var_name in X_raw.columns:
+            # Valid mask
+            valid_mask = ~X_raw[var_name].isna()
+            
+            # Count valid per class
+            n_valid_ok = ((y == 0) & valid_mask).sum()
+            n_valid_ng = ((y == 1) & valid_mask).sum()
+            
+            n_miss = int(missing_map[var_name])
+        else:
+            # Derived variable -> Assume all valid for the rows we have
+            n_valid_ok = (y == 0).sum()
+            n_valid_ng = (y == 1).sum()
+            n_miss = 0
+            
+        item["n_valid"] = int(n_total - n_miss)
+        item["n_valid_ok"] = int(n_valid_ok)
+        item["n_valid_ng"] = int(n_valid_ng)
+        item["n_missing"] = n_miss
+        item["n_total"] = int(n_total)
 
     return {
         "mode": mode,

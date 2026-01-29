@@ -36,6 +36,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Check for cached results (from Defect Trend)
+    const cachedResult = sessionStorage.getItem('analysis_result_cache');
+    if (cachedResult) {
+        try {
+            const data = JSON.parse(cachedResult);
+            // Wait a bit to ensure elements are ready
+            setTimeout(() => {
+                loadingOverlay.style.display = 'none';
+                renderResults(data);
+                // Optional: Clear cache so refresh doesn't reload it? 
+                // Better keep it for refresh, but maybe clear on navigating away.
+                // For now, let's clear it to avoid stuck state.
+                sessionStorage.removeItem('analysis_result_cache');
+            }, 100);
+        } catch (e) {
+            console.error("Failed to parse cached analysis result", e);
+        }
+    }
+
     // ----------------------------------------------------------------
     // File Upload Handling
     // ----------------------------------------------------------------
@@ -136,7 +155,12 @@ document.addEventListener('DOMContentLoaded', () => {
             div.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
                     <div style="width: 20px; font-weight: bold; color: #888;">${index + 1}</div>
-                    <div style="font-weight: 500; word-break: break-all;">${item.variable}</div>
+                    <div style="display: flex; flex-direction: column;">
+                        <div style="font-weight: 500; word-break: break-all;">${item.variable}</div>
+                        <div style="font-size: 0.75rem; color: #9ca3af;" title="有効データ数 (OK: 正常品, NG: 不具合品)">
+                           N=${item.n_valid} (OK:${item.n_valid_ok}, NG:${item.n_valid_ng}) <span style="margin-left:5px; opacity:0.7;">欠損:${item.n_missing}</span>
+                        </div>
+                    </div>
                 </div>
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
                     <div style="font-size: 0.8rem; color: var(--text-secondary);">
