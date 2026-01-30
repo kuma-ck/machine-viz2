@@ -6,13 +6,15 @@ const state = {
     pageSize: 20,
     totalItems: 0,
     sortField: 'defect_date',
-    sortOrder: 'desc'
+    sortOrder: 'desc',
+    granularity: 'daily'  // 'daily' or 'monthly'
 };
 
 document.addEventListener('DOMContentLoaded', () => {
     initFilters();
     initChart();
     initSorting();
+    initGranularityToggle();
 });
 
 // --- Initialization ---
@@ -177,6 +179,35 @@ async function initFilters() {
             document.querySelectorAll('.machine-checkbox').forEach(cb => {
                 cb.checked = e.target.checked;
             });
+        });
+    }
+}
+
+function initGranularityToggle() {
+    const dailyBtn = document.getElementById('daily-btn');
+    const monthlyBtn = document.getElementById('monthly-btn');
+
+    if (dailyBtn && monthlyBtn) {
+        dailyBtn.addEventListener('click', () => {
+            if (state.granularity !== 'daily') {
+                state.granularity = 'daily';
+                dailyBtn.classList.remove('btn-outline-secondary');
+                dailyBtn.classList.add('btn-primary');
+                monthlyBtn.classList.remove('btn-primary');
+                monthlyBtn.classList.add('btn-outline-secondary');
+                loadData();
+            }
+        });
+
+        monthlyBtn.addEventListener('click', () => {
+            if (state.granularity !== 'monthly') {
+                state.granularity = 'monthly';
+                monthlyBtn.classList.remove('btn-outline-secondary');
+                monthlyBtn.classList.add('btn-primary');
+                dailyBtn.classList.remove('btn-primary');
+                dailyBtn.classList.add('btn-outline-secondary');
+                loadData();
+            }
         });
     }
 }
@@ -362,7 +393,8 @@ async function loadData() {
         defect_categories: category ? [category] : [],
         defect_code: code,
         sort_field: state.sortField,
-        sort_order: state.sortOrder
+        sort_order: state.sortOrder,
+        granularity: state.granularity
     };
 
     // Parallel requests for chart and list
@@ -405,6 +437,16 @@ async function loadData() {
 
 function renderChart(data) {
     if (!chart) return;
+
+    // Update summary display
+    const summaryEl = document.getElementById('trend-summary');
+    if (summaryEl && data.total_count !== undefined) {
+        summaryEl.innerHTML = `
+            <span style="padding: 4px 12px; background: #f3f4f6; border-radius: 4px;">
+                <strong>総件数:</strong> ${data.total_count.toLocaleString()} 件
+            </span>
+        `;
+    }
 
     const option = {
         tooltip: {
@@ -466,7 +508,44 @@ function renderDistributionChart(data) {
 
     if (!data.months || data.months.length === 0) {
         distChart.clear();
+        document.getElementById('data-summary').innerHTML = '';
         return;
+    }
+
+    // Calculate totals for summary
+    const totalValidMachines = data.total_counts.reduce((sum, val) => sum + val, 0);
+    const totalMissingMachines = data.missing_counts ? data.missing_counts.reduce((sum, val) => sum + val, 0) : (data.total_missing || 0);
+
+    const totalValidDefects = data.defect_counts.reduce((sum, val) => sum + val, 0);
+    const totalMissingDefects = data.missing_defect_count || 0;
+    const totalAllDefects = totalValidDefects + totalMissingDefects;
+
+    // Update summary display
+    const summaryEl = document.getElementById('data-summary');
+    if (summaryEl) {
+        summaryEl.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+                <div style="display: flex; gap: 8px;">
+                    <span style="padding: 2px 8px; background: #e0f2fe; border-radius: 4px; font-size: 0.85rem;">
+                        <strong>有効生産台数:</strong> ${totalValidMachines.toLocaleString()} 台
+                    </span>
+                    <span style="padding: 2px 8px; background: #fef3c7; border-radius: 4px; font-size: 0.85rem;">
+                        <strong>製造月不明台数:</strong> ${totalMissingMachines.toLocaleString()} 台
+                    </span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <span style="padding: 2px 8px; background: #dcfce7; border-radius: 4px; font-size: 0.85rem;">
+                        <strong>表示不具合:</strong> ${totalValidDefects.toLocaleString()} 件
+                    </span>
+                    <span style="padding: 2px 8px; background: #fee2e2; border-radius: 4px; font-size: 0.85rem;">
+                        <strong>製造月不明不具合:</strong> ${totalMissingDefects.toLocaleString()} 件
+                    </span>
+                    <span style="padding: 2px 8px; background: #f3f4f6; border-radius: 4px; font-size: 0.85rem; border: 1px solid #d1d5db;">
+                        <strong>不具合計:</strong> ${totalAllDefects.toLocaleString()} 件
+                    </span>
+                </div>
+            </div>
+        `;
     }
 
     // Calculate defect rates
@@ -477,7 +556,18 @@ function renderDistributionChart(data) {
     const option = {
         tooltip: {
             trigger: 'axis',
-            axisPointer: { type: 'shadow' }
+            axisPointer: { type: 'shadow' },
+            formatter: function (params) {
+                let result = `<strong>${params[0].name}</strong><br/>`;
+                params.forEach(param => {
+                    if (param.seriesName === '不具合発生率') {
+                        result += `${param.marker} ${param.seriesName}: ${param.value}%<br/>`;
+                    } else {
+                        result += `${param.marker} ${param.seriesName}: ${param.value} 台<br/>`;
+                    }
+                });
+                return result;
+            }
         },
         legend: {
             data: ['全生産台数', '不具合発生台数', '不具合発生率']
@@ -502,27 +592,18 @@ function renderDistributionChart(data) {
         yAxis: [
             {
                 type: 'value',
-                name: '全生産台数',
+                name: '台数',
                 position: 'left',
                 axisLine: { show: true, lineStyle: { color: '#6b7280' } },
                 axisLabel: { color: '#6b7280' }
             },
             {
                 type: 'value',
-                name: '不具合台数',
-                position: 'right',
-                offset: 0,
-                axisLine: { show: true, lineStyle: { color: '#ef4444' } },
-                axisLabel: { color: '#ef4444' },
-                splitLine: { show: false }
-            },
-            {
-                type: 'value',
                 name: '発生率',
                 position: 'right',
-                offset: 50,
-                axisLine: { show: true, lineStyle: { color: '#fbbf24' } },
-                axisLabel: { formatter: '{value} %', color: '#fbbf24' },
+                offset: 0,
+                axisLine: { show: true, lineStyle: { color: '#10b981' } },
+                axisLabel: { formatter: '{value} %', color: '#10b981' },
                 splitLine: { show: false }
             }
         ],
@@ -532,24 +613,24 @@ function renderDistributionChart(data) {
                 type: 'bar',
                 yAxisIndex: 0,
                 data: data.total_counts,
-                itemStyle: { color: '#d1d5db' },
-                barGap: '-100%',
-                opacity: 0.5
+                itemStyle: { color: '#9ca3af' },
+                barGap: '0%',
+                barWidth: '60%'
             },
             {
                 name: '不具合発生台数',
                 type: 'bar',
-                yAxisIndex: 1,
+                yAxisIndex: 0,
                 data: data.defect_counts,
                 itemStyle: { color: '#ef4444' },
-                barWidth: '40%'
+                barWidth: '60%'
             },
             {
                 name: '不具合発生率',
                 type: 'line',
-                yAxisIndex: 2,
+                yAxisIndex: 1,
                 data: rates,
-                itemStyle: { color: '#fbbf24' },
+                itemStyle: { color: '#10b981' },
                 symbol: 'circle',
                 symbolSize: 6,
                 lineStyle: { width: 2 }
@@ -651,186 +732,3 @@ function renderPagination() {
     if (prevBtn) prevBtn.disabled = (page <= 1);
     if (nextBtn) nextBtn.disabled = (page >= totalPages);
 }
-
-
-// ----------------------------------------------------------------
-// Analysis Integration
-// ----------------------------------------------------------------
-document.addEventListener('DOMContentLoaded', () => {
-    const analyzeBtn = document.getElementById('analyze-btn');
-    const modal = document.getElementById('analysis-modal');
-    const closeBtn = document.getElementById('close-modal-btn');
-    const cancelBtn = document.getElementById('cancel-analysis');
-    const runBtn = document.getElementById('run-analysis-btn');
-    const container = document.getElementById('characteristics-container');
-
-    let characteristicsLoaded = false;
-
-    if (analyzeBtn && modal) {
-        analyzeBtn.addEventListener('click', async () => {
-            // Check if series selected
-            const series = document.getElementById('series-select').value;
-            if (!series) {
-                showToast('解析を実行するには、シリーズを選択・更新してください', 'warning');
-                return;
-            }
-
-            modal.classList.remove('hidden');
-            if (!characteristicsLoaded) {
-                await loadCharacteristics();
-            }
-        });
-
-        const closeModal = () => modal.classList.add('hidden');
-        closeBtn.addEventListener('click', closeModal);
-        cancelBtn.addEventListener('click', closeModal);
-
-        runBtn.addEventListener('click', executeAnalysis);
-    }
-
-    async function loadCharacteristics() {
-        const loading = document.getElementById('loading-characteristics');
-        container.innerHTML = '';
-        loading.style.display = 'block';
-
-        try {
-            const res = await fetch('/analysis/api/characteristics');
-            if (!res.ok) throw new Error('Failed to load');
-            const data = await res.json();
-
-            renderCharacteristics(data);
-            characteristicsLoaded = true;
-        } catch (e) {
-            console.error(e);
-            container.innerHTML = '<p class="text-error">特性値リストの読み込みに失敗しました</p>';
-        } finally {
-            loading.style.display = 'none';
-        }
-    }
-
-    function renderCharacteristics(data) {
-        container.innerHTML = '';
-
-        data.forEach(group => {
-            const groupDiv = document.createElement('div');
-            groupDiv.innerHTML = `<h4 style="margin: 10px 0 5px; font-size: 0.9rem; color: #666;">${group.category}</h4>`;
-
-            const listDiv = document.createElement('div');
-            listDiv.style.display = 'grid';
-            listDiv.style.gridTemplateColumns = 'repeat(auto-fill, minmax(140px, 1fr))';
-            listDiv.style.gap = '5px';
-
-            // Quantitative
-            group.quantitative.forEach(id => {
-                const item = createCharCheckbox(group.category, id);
-                listDiv.appendChild(item);
-            });
-
-            // Qualitative (ignore for now? or include?)
-            // Implementation plan mainly focuses on stats, but analysis logic handles strings?
-            // Let's include them.
-            group.qualitative.forEach(id => {
-                const item = createCharCheckbox(group.category, id);
-                listDiv.appendChild(item);
-            });
-
-            groupDiv.appendChild(listDiv);
-            container.appendChild(groupDiv);
-        });
-
-        updateSelectionCount();
-    }
-
-    function createCharCheckbox(category, id) {
-        const label = document.createElement('label');
-        label.className = 'checkbox-label';
-        label.style.display = 'flex';
-        label.style.alignItems = 'center';
-        label.style.fontSize = '0.85rem';
-        label.style.cursor = 'pointer';
-
-        const key = `${category}__${id}`;
-        // Default select some? No.
-
-        label.innerHTML = `
-            <input type="checkbox" class="char-select" value="${key}" style="margin-right: 5px;">
-            ${id}
-        `;
-
-        label.querySelector('input').addEventListener('change', updateSelectionCount);
-        return label;
-    }
-
-    function updateSelectionCount() {
-        const checked = document.querySelectorAll('.char-select:checked');
-        const count = checked.length;
-        const countSpan = document.getElementById('selected-count');
-        const runBtn = document.getElementById('run-analysis-btn');
-
-        countSpan.textContent = count;
-
-        if (count > 0 && count <= 20) {
-            runBtn.disabled = false;
-            countSpan.style.color = 'inherit';
-        } else {
-            runBtn.disabled = true;
-            if (count > 20) countSpan.style.color = 'red';
-        }
-    }
-
-    async function executeAnalysis() {
-        // Collect Main Filters
-        const series = document.getElementById('series-select').value;
-        const startDate = document.getElementById('start-date').value;
-        const endDate = document.getElementById('end-date').value;
-        const category = document.getElementById('category-select').value;
-        const code = document.getElementById('code-select').value;
-
-        const selectedModels = Array.from(document.querySelectorAll('.model-checkbox:checked'))
-            .map(cb => cb.value);
-
-        // Collect Characteristics
-        const selectedChars = Array.from(document.querySelectorAll('.char-select:checked'))
-            .map(cb => cb.value);
-
-        const payload = {
-            series: series,
-            models: selectedModels,
-            start_date: startDate,
-            end_date: endDate,
-            defect_categories: category ? [category] : [],
-            defect_code: code,
-            characteristic_ids: selectedChars
-        };
-
-        // Show Loading (Reuse toast or disable button)
-        const runBtn = document.getElementById('run-analysis-btn');
-        runBtn.disabled = true;
-        runBtn.textContent = '解析中...';
-
-        try {
-            const res = await fetch('/analysis/api/from_trend', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.detail || 'Analysis failed');
-            }
-
-            const result = await res.json();
-
-            // Store result and redirect
-            sessionStorage.setItem('analysis_result_cache', JSON.stringify(result));
-            window.location.href = '/analysis';
-
-        } catch (e) {
-            console.error(e);
-            showToast(`エラー: ${e.message}`, 'error');
-            runBtn.disabled = false;
-            runBtn.textContent = '解析実行';
-        }
-    }
-});

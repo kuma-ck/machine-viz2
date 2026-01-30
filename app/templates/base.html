@@ -22,6 +22,7 @@
         </div>
         {% if request.cookies.get("access_token") and request.url.path != "/login" %}
         <div class="navbar-menu">
+            <!-- Main Analysis -->
             <a href="/patrol/list" class="navbar-item {% if request.url.path.startswith('/patrol') %}active{% endif %}">
                 <i data-lucide="shield-check"></i> パトロール結果
             </a>
@@ -33,18 +34,20 @@
                 class="navbar-item {% if request.url.path.startswith('/cross-section') %}active{% endif %}">
                 <i data-lucide="bar-chart-2"></i> 断面データ
             </a>
-            <a href="/search" class="navbar-item {% if request.url.path.startswith('/search') %}active{% endif %}">
-                <i data-lucide="search"></i> 機番検索
+            <a href="/analysis" class="navbar-item {% if request.url.path.startswith('/analysis') %}active{% endif %}">
+                <i data-lucide="microscope"></i> 要因解析
             </a>
             <a href="/history" class="navbar-item {% if request.url.path.startswith('/history') %}active{% endif %}">
                 <i data-lucide="history"></i> 機番履歴
             </a>
+
+            <!-- Divider -->
+            <div style="width: 1px; height: 24px; background-color: var(--border-color); margin: 0 0.5rem;"></div>
+
+            <!-- Supplementary Data -->
             <a href="/data-catalog"
                 class="navbar-item {% if request.url.path.startswith('/data-catalog') %}active{% endif %}">
                 <i data-lucide="database"></i> データカタログ
-            </a>
-            <a href="/analysis" class="navbar-item {% if request.url.path.startswith('/analysis') %}active{% endif %}">
-                <i data-lucide="microscope"></i> 要因解析
             </a>
         </div>
         <div class="navbar-end">

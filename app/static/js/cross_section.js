@@ -326,6 +326,8 @@ async function loadData() {
         state.detailData = []; // Clear previous details
         state.currentPage = 1; // Reset page
 
+        renderStats(data);
+
 
         if (activeTab === 'histogram') {
             renderHistogram(data);
@@ -799,16 +801,69 @@ function downloadCSV() {
 
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    const s = document.getElementById('start-date').value;
-    const e = document.getElementById('end-date').value;
-    link.setAttribute("download", `cross_section_${s}_to_${e}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `cross_section_data.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
 }
+
+function renderStats(data) {
+    let container = document.getElementById('stats-info-container');
+    if (!container) {
+        // Create if not exists - insert before chart
+        const chartArea = document.querySelector('.chart-area');
+        const chartDiv = document.getElementById('cross-section-chart');
+        if (chartArea && chartDiv) {
+            container = document.createElement('div');
+            container.id = 'stats-info-container';
+            container.style.cssText = 'display: flex; gap: 20px; padding: 0 10px 10px 10px; font-size: 0.8rem; color: var(--text-secondary); justify-content: flex-end; border-bottom: 1px solid #f1f5f9; margin-bottom: 10px;';
+            chartArea.insertBefore(container, chartDiv);
+        } else {
+            return;
+        }
+    }
+
+    container.innerHTML = '';
+
+    if (!data.groups || data.groups.length === 0) return;
+
+    data.groups.forEach((g, index) => {
+        const color = index === 0 ? '#6366f1' : (index === 1 ? '#f43f5e' : '#10b981'); // Match chart colors (single uses green in scatter, but histogram/box use blue/orange)
+        // Adjust default colors if needed to match renderHistogram/renderScatter/renderBoxplot logic
+        // Histogram: 0 -> #6366f1, 1 -> #f43f5e. Single -> #6366f1.
+        // Scatter: 0 -> #6366f1, 1 -> #f43f5e. Single -> #10b981.
+        // Boxplot: 0 -> #6366f1, 1 -> #f43f5e. Single -> #f59e0b.
+
+        let finalColor = color;
+        if (data.groups.length === 1) { // Single mode
+            if (state.chartType === 'scatter') finalColor = '#10b981';
+            else if (state.chartType === 'boxplot') finalColor = '#f59e0b';
+            else finalColor = '#6366f1';
+        }
+
+        const name = (g.name === 'All' || g.name === 'all') ? (data.groups.length === 1 ? '全データ' : g.name) : g.name;
+
+        const valid = g.valid_count !== undefined ? g.valid_count.toLocaleString() : '-';
+        const missing = g.missing_count !== undefined ? g.missing_count.toLocaleString() : '-';
+
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.innerHTML = `
+            <span style="display:inline-block; width:8px; height:8px; background-color:${finalColor}; border-radius:50%; margin-right:6px;"></span>
+            <span style="font-weight:bold; margin-right:6px; color:var(--text-primary);">${name}</span>
+            <span style="margin-right:4px;">有効:</span><span style="font-weight:500; color:var(--text-primary); margin-right:10px;">${valid}</span>
+            <span style="margin-right:4px;">欠損:</span><span style="font-weight:500; color:var(--text-primary);">${missing}</span>
+        `;
+        container.appendChild(div);
+    });
+}
+
 
 
 function updateUrlFromState() {

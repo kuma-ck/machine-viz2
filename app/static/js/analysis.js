@@ -36,25 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Check for cached results (from Defect Trend)
-    const cachedResult = sessionStorage.getItem('analysis_result_cache');
-    if (cachedResult) {
-        try {
-            const data = JSON.parse(cachedResult);
-            // Wait a bit to ensure elements are ready
-            setTimeout(() => {
-                loadingOverlay.style.display = 'none';
-                renderResults(data);
-                // Optional: Clear cache so refresh doesn't reload it? 
-                // Better keep it for refresh, but maybe clear on navigating away.
-                // For now, let's clear it to avoid stuck state.
-                sessionStorage.removeItem('analysis_result_cache');
-            }, 100);
-        } catch (e) {
-            console.error("Failed to parse cached analysis result", e);
-        }
-    }
-
     // ----------------------------------------------------------------
     // File Upload Handling
     // ----------------------------------------------------------------

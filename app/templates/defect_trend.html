@@ -56,59 +56,36 @@
         </div>
         <button id="search-btn" class="btn btn-sm btn-primary">更新</button>
         <button id="reset-btn" class="btn btn-sm btn-secondary">リセット</button>
-        <div style="width: 1px; height: 20px; background: #ccc; margin: 0 10px;"></div>
-        <button id="analyze-btn" class="btn btn-sm" style="background-color: #7c3aed; color: white; border: none;">
-            <span style="margin-right: 5px;">⚡</span>要因解析
-        </button>
-    </div>
-</div>
-
-<!-- Analysis Modal -->
-<div id="analysis-modal" class="modal-overlay hidden">
-    <div class="modal-content" style="max-width: 600px;">
-        <div class="modal-header">
-            <h3>不具合要因解析</h3>
-            <button id="close-modal-btn" class="close-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <p style="margin-bottom: 1rem; color: var(--text-secondary);">
-                現在のフィルタ条件に該当する不具合機と、正常機を比較解析します。<br>
-                解析に使用する特性値（センサーデータ等）を選択してください。（最大20個）
-            </p>
-
-            <div id="loading-characteristics" style="text-align: center; padding: 20px; display: none;">
-                <div class="spinner"></div> 読み込み中...
-            </div>
-
-            <div id="characteristics-container"
-                style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px;">
-                <!-- Dynamically populated -->
-            </div>
-
-            <div style="text-align: right; margin-top: 10px; font-size: 0.9rem;">
-                選択中: <span id="selected-count" style="font-weight: bold;">0</span> / 20
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button id="cancel-analysis" class="btn btn-secondary">キャンセル</button>
-            <button id="run-analysis-btn" class="btn btn-primary" disabled>解析実行</button>
-        </div>
     </div>
 </div>
 
 <div class="main-area-stacked">
     <!-- 上段：チャートエリア -->
     <div class="chart-area" style="height: 400px; margin-bottom: var(--spacing-md);">
-        <div class="chart-header">
+        <div class="chart-header" style="display: flex; justify-content: space-between; align-items: center;">
             <h2>不具合発生推移</h2>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div id="trend-summary" style="font-size: 0.85rem; color: var(--text-secondary);">
+                    <!-- Populated by JS -->
+                </div>
+                <div class="btn-group" role="group" style="font-size: 0.85rem;">
+                    <button id="daily-btn" class="btn btn-sm btn-primary"
+                        style="border-radius: 4px 0 0 4px;">日次</button>
+                    <button id="monthly-btn" class="btn btn-sm btn-outline-secondary"
+                        style="border-radius: 0 4px 4px 0;">月次</button>
+                </div>
+            </div>
         </div>
         <div id="trend-chart" style="width: 100%; height: 350px;"></div>
     </div>
 
     <!-- 中段：製造月分布比較チャート -->
     <div class="chart-area" style="height: 400px; margin-bottom: var(--spacing-md);">
-        <div class="chart-header">
+        <div class="chart-header" style="display: flex; justify-content: space-between; align-items: center;">
             <h2>製造月別分布比較</h2>
+            <div id="data-summary" style="font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 1rem;">
+                <!-- Populated by JS -->
+            </div>
         </div>
         <div id="distribution-chart" style="width: 100%; height: 350px;"></div>
     </div>

@@ -221,7 +221,7 @@
 
     <!-- パターン1 -->
     <div class="workflow-section">
-        <h2 class="section-title"><i data-lucide="shield-check"></i> 不具合監視・分析フロー</h2>
+        <h2 class="section-title"><i data-lucide="bar-chart-2"></i> 主要分析機能</h2>
         <div class="card-grid">
             <a href="/patrol/list" class="nav-card">
                 <div class="card-icon">
@@ -248,13 +248,50 @@
                     シリーズや不具合ごとの発生傾向を可視化します。
                     製造月別の分布比較なども可能です。
                 </div>
+                <div class="flow-steps">
+                    <div class="flow-step"><i data-lucide="chevron-right"></i> 傾向把握</div>
+                    <div class="flow-step"><i data-lucide="chevron-right"></i> 対策立案</div>
+                </div>
+            </a>
+
+            <a href="/cross-section" class="nav-card">
+                <div class="card-icon">
+                    <i data-lucide="bar-chart"></i>
+                </div>
+                <div class="card-title">断面データ分析</div>
+                <div class="card-desc">
+                    特定の時点や条件下でのデータの分布や統計量を確認します。
+                    ヒストグラムや箱ひげ図を用いた分析が可能です。
+                </div>
+            </a>
+
+            <a href="/analysis" class="nav-card">
+                <div class="card-icon">
+                    <i data-lucide="microscope"></i>
+                </div>
+                <div class="card-title">要因解析</div>
+                <div class="card-desc">
+                    不具合の根本原因を特定するための詳細な分析を行います。
+                    多角的な視点からデータを深掘りします。
+                </div>
+            </a>
+
+            <a href="/history" class="nav-card">
+                <div class="card-icon">
+                    <i data-lucide="history"></i>
+                </div>
+                <div class="card-title">機番履歴表示</div>
+                <div class="card-desc">
+                    特定機番のイベント履歴、特性値推移を詳細に確認できます。
+                    こちらは機番が特定できている場合の直接遷移用です。
+                </div>
             </a>
         </div>
     </div>
 
     <!-- パターン2 -->
     <div class="workflow-section">
-        <h2 class="section-title"><i data-lucide="search"></i> 機番調査フロー</h2>
+        <h2 class="section-title"><i data-lucide="database"></i> データ・履歴参照</h2>
         <div class="card-grid">
             <a href="/search" class="nav-card">
                 <div class="card-icon">
@@ -268,16 +305,6 @@
                 <div class="flow-steps">
                     <div class="flow-step"><i data-lucide="chevron-right"></i> 機番検索</div>
                     <div class="flow-step"><i data-lucide="chevron-right"></i> 機番履歴詳細</div>
-                </div>
-            </a>
-
-            <a href="/history" class="nav-card">
-                <div class="card-icon">
-                    <i data-lucide="history"></i>
-                </div>
-                <div class="card-title">機番履歴表示</div>
-                <div class="card-desc">
-                    特定機番のイベント履歴、特性値推移を詳細に確認できます。
                 </div>
             </a>
 

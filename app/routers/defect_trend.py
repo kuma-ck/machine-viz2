@@ -26,6 +26,7 @@ class TrendRequest(BaseModel):
     defect_code: Optional[str] = ""
     sort_field: str = "defect_date"
     sort_order: str = "desc"
+    granularity: str = "daily"  # "daily" or "monthly"
 
 # Routes
 @router.get("", response_class=HTMLResponse)
@@ -52,6 +53,7 @@ async def get_trend_chart_data(
             end_date=request.end_date,
             defect_categories=request.defect_categories,
             defect_code=request.defect_code,
+            granularity=request.granularity,
         )
     
     # Real DB
@@ -63,6 +65,7 @@ async def get_trend_chart_data(
         end_date=request.end_date,
         defect_categories=request.defect_categories,
         defect_code=request.defect_code,
+        granularity=request.granularity,
     )
 
 

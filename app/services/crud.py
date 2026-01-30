@@ -408,49 +408,99 @@ async def get_defect_trend_data(
     end_date: date,
     defect_categories: List[str] = [],
     defect_code: str = "",
+    granularity: str = "daily",
 ) -> Dict[str, Any]:
     """不具合発生推移データ（チャート用）を取得"""
     
-    # Build query for defect events
-    stmt = (
-        select(Event.event_date, func.count(Event.id).label("count"))
-        .join(Machine)
-        .where(Event.event_type == "不具合発生")
-        .where(Event.event_date >= start_date)
-        .where(Event.event_date <= end_date)
-    )
-    
-    if series:
-        stmt = stmt.where(Machine.model_series == series)
-    if models:
-        stmt = stmt.where(Machine.model_number.in_(models))
-    if defect_categories:
-        stmt = stmt.where(Event.event_category.in_(defect_categories))
-    if defect_code:
-        stmt = stmt.where(Event.event_code.contains(defect_code))
-    
-    stmt = stmt.group_by(Event.event_date).order_by(Event.event_date)
+    # Build query for defect events based on granularity
+    if granularity == "monthly":
+        # Monthly aggregation
+        month_label = func.strftime('%Y-%m', Event.event_date).label("month")
+        stmt = (
+            select(month_label, func.count(Event.id).label("count"))
+            .join(Machine)
+            .where(Event.event_type == "不具合発生")
+            .where(Event.event_date >= start_date)
+            .where(Event.event_date <= end_date)
+        )
+        
+        if series:
+            stmt = stmt.where(Machine.model_series == series)
+        if models:
+            stmt = stmt.where(Machine.model_number.in_(models))
+        if defect_categories:
+            stmt = stmt.where(Event.event_category.in_(defect_categories))
+        if defect_code:
+            stmt = stmt.where(Event.event_code.contains(defect_code))
+        
+        stmt = stmt.group_by(month_label).order_by(month_label)
+    else:
+        # Daily aggregation
+        stmt = (
+            select(Event.event_date, func.count(Event.id).label("count"))
+            .join(Machine)
+            .where(Event.event_type == "不具合発生")
+            .where(Event.event_date >= start_date)
+            .where(Event.event_date <= end_date)
+        )
+        
+        if series:
+            stmt = stmt.where(Machine.model_series == series)
+        if models:
+            stmt = stmt.where(Machine.model_number.in_(models))
+        if defect_categories:
+            stmt = stmt.where(Event.event_category.in_(defect_categories))
+        if defect_code:
+            stmt = stmt.where(Event.event_code.contains(defect_code))
+        
+        stmt = stmt.group_by(Event.event_date).order_by(Event.event_date)
     
     result = await db.execute(stmt)
     rows = result.all()
     
-    # Build date -> count map
-    date_counts = {row.event_date.isoformat(): row.count for row in rows}
-    
-    # Fill in all dates in range
-    all_dates = []
-    counts = []
-    current = start_date
-    while current <= end_date:
-        date_str = current.isoformat()
-        all_dates.append(date_str)
-        counts.append(date_counts.get(date_str, 0))
-        current += timedelta(days=1)
-    
-    return {
-        "dates": all_dates,
-        "counts": counts,
-    }
+    if granularity == "monthly":
+        # Build month -> count map
+        month_counts = {row.month: row.count for row in rows}
+        
+        # Fill in all months in range
+        all_months = []
+        counts = []
+        current = start_date.replace(day=1)
+        end_month = end_date.replace(day=1)
+        
+        while current <= end_month:
+            month_str = current.strftime("%Y-%m")
+            all_months.append(month_str)
+            counts.append(month_counts.get(month_str, 0))
+            if current.month == 12:
+                current = current.replace(year=current.year + 1, month=1)
+            else:
+                current = current.replace(month=current.month + 1)
+        
+        return {
+            "dates": all_months,
+            "counts": counts,
+            "total_count": sum(counts),
+        }
+    else:
+        # Build date -> count map
+        date_counts = {row.event_date.isoformat(): row.count for row in rows}
+        
+        # Fill in all dates in range
+        all_dates = []
+        counts = []
+        current = start_date
+        while current <= end_date:
+            date_str = current.isoformat()
+            all_dates.append(date_str)
+            counts.append(date_counts.get(date_str, 0))
+            current += timedelta(days=1)
+        
+        return {
+            "dates": all_dates,
+            "counts": counts,
+            "total_count": sum(counts),
+        }
 
 
 async def get_machines_matching_filter(
@@ -607,21 +657,63 @@ async def get_manufacturing_distribution(
             "months": [],
             "defect_counts": [],
             "total_counts": [],
+            "missing_counts": [],
         }
+    
+    # Query for machines with NULL manufacturing month (missing data)
+    missing_stmt = select(func.count(Machine.id)).where(Machine.manufacture_month.is_(None))
+    
+    if series:
+        missing_stmt = missing_stmt.where(Machine.model_series == series)
+    if models:
+        missing_stmt = missing_stmt.where(Machine.model_number.in_(models))
+    
+    missing_result = await db.execute(missing_stmt)
+    total_missing = missing_result.scalar() or 0
+    
+    # Query for defects on machines with NULL manufacturing month
+    missing_defect_stmt = (
+        select(func.count(Event.id))
+        .join(Machine)
+        .where(Machine.manufacture_month.is_(None))
+        .where(Event.event_type == "不具合発生")
+        .where(Event.event_date >= start_date)
+        .where(Event.event_date <= end_date)
+    )
+    
+    if series:
+        missing_defect_stmt = missing_defect_stmt.where(Machine.model_series == series)
+    if models:
+        missing_defect_stmt = missing_defect_stmt.where(Machine.model_number.in_(models))
+    if defect_categories:
+        missing_defect_stmt = missing_defect_stmt.where(Event.event_category.in_(defect_categories))
+    if defect_code:
+        missing_defect_stmt = missing_defect_stmt.where(Event.event_code.contains(defect_code))
+
+    missing_defect_result = await db.execute(missing_defect_stmt)
+    missing_defect_count = missing_defect_result.scalar() or 0
     
     months = []
     defect_counts = []
     total_counts = []
+    missing_counts = []
     
     for month in all_months:
         months.append(month)
         defect_counts.append(defect_by_month.get(month, 0))
         total_counts.append(total_by_month.get(month, 0))
+        # Distribute missing count evenly across months (or could be shown separately)
+        # For simplicity, show total missing on first month, 0 on others
+        # Or better: show as a separate constant value
+        missing_counts.append(0)  # We'll show total_missing separately
     
     return {
         "months": months,
         "defect_counts": defect_counts,
         "total_counts": total_counts,
+        "missing_counts": missing_counts,
+        "total_missing": int(total_missing),  # Total machines without manufacturing month
+        "missing_defect_count": int(missing_defect_count), # Defects on machines without manufacturing month
     }
 
 
