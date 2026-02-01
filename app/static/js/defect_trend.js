@@ -1,5 +1,6 @@
 let chart = null;
 let distChart = null;
+let siteDistChart = null;
 
 const state = {
     currentPage: 1,
@@ -362,11 +363,18 @@ function initChart() {
         });
     }
 
+    const siteDistChartDom = document.getElementById('site-distribution-chart');
+    if (siteDistChartDom) {
+        siteDistChart = echarts.init(siteDistChartDom);
+    }
+
     window.addEventListener('resize', () => {
         if (chart) chart.resize();
         if (distChart) distChart.resize();
+        if (siteDistChart) siteDistChart.resize();
     });
 }
+
 
 // --- Data Loading ---
 
@@ -399,13 +407,18 @@ async function loadData() {
 
     // Parallel requests for chart and list
     try {
-        const [chartRes, distRes, listRes] = await Promise.all([
+        const [chartRes, distRes, siteRes, listRes] = await Promise.all([
             fetch('/defect-trend/api/chart', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             }),
             fetch('/defect-trend/api/distribution', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }),
+            fetch('/defect-trend/api/distribution/site', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -417,15 +430,19 @@ async function loadData() {
             })
         ]);
 
-        if (!chartRes.ok || !distRes.ok || !listRes.ok) throw new Error("API Error");
+
+        if (!chartRes.ok || !distRes.ok || !siteRes.ok || !listRes.ok) throw new Error("API Error");
 
         const chartData = await chartRes.json();
         const distData = await distRes.json();
+        const siteDistData = await siteRes.json();
         const listData = await listRes.json(); // { items, total, page, page_size }
 
         renderChart(chartData);
         renderDistributionChart(distData);
+        renderSiteDistributionChart(siteDistData);
         renderTable(listData);
+
 
     } catch (e) {
         console.error('Error loading data:', e);
@@ -574,7 +591,7 @@ function renderDistributionChart(data) {
         },
         grid: {
             left: '3%',
-            right: '15%',
+            right: '25%',
             bottom: '20%',
             containLabel: true
         },
@@ -592,16 +609,24 @@ function renderDistributionChart(data) {
         yAxis: [
             {
                 type: 'value',
-                name: '台数',
+                name: '生産台数',
                 position: 'left',
-                axisLine: { show: true, lineStyle: { color: '#6b7280' } },
-                axisLabel: { color: '#6b7280' }
+                axisLine: { show: true, lineStyle: { color: '#9ca3af' } },
+                axisLabel: { color: '#9ca3af' }
+            },
+            {
+                type: 'value',
+                name: '不具合台数',
+                position: 'right',
+                axisLine: { show: true, lineStyle: { color: '#ef4444' } },
+                axisLabel: { color: '#ef4444' },
+                splitLine: { show: false }
             },
             {
                 type: 'value',
                 name: '発生率',
                 position: 'right',
-                offset: 0,
+                offset: 70,
                 axisLine: { show: true, lineStyle: { color: '#10b981' } },
                 axisLabel: { formatter: '{value} %', color: '#10b981' },
                 splitLine: { show: false }
@@ -614,32 +639,175 @@ function renderDistributionChart(data) {
                 yAxisIndex: 0,
                 data: data.total_counts,
                 itemStyle: { color: '#9ca3af' },
-                barGap: '0%',
-                barWidth: '60%'
+                barGap: '-100%', // Overlap bars so they share space, or separate? 
+                // If separate axis, they will overlap visually if in same category slot.
+                // -100% makes them completely overlapping.
+                // Let's try placing Production "behind" Defect Count? 
+                // Production (1000) vs Defect (50).
+                // Defect (Right Scale 0-100) -> Bar height 50%.
+                // Production (Left Scale 0-2000) -> Bar height 50%.
+                // They will overlap.
+                // To see both, opacity might be needed, or make one narrower.
+                barWidth: '60%',
+                z: 1
             },
             {
                 name: '不具合発生台数',
                 type: 'bar',
-                yAxisIndex: 0,
+                yAxisIndex: 1,
                 data: data.defect_counts,
                 itemStyle: { color: '#ef4444' },
-                barWidth: '60%'
+                barWidth: '30%', // Make narrower to sit "inside" or "in front"
+                z: 2
             },
             {
                 name: '不具合発生率',
                 type: 'line',
-                yAxisIndex: 1,
+                yAxisIndex: 2,
                 data: rates,
                 itemStyle: { color: '#10b981' },
                 symbol: 'circle',
                 symbolSize: 6,
-                lineStyle: { width: 2 }
+                lineStyle: { width: 2 },
+                z: 3
             }
         ]
     };
 
     distChart.setOption(option);
 }
+
+function renderSiteDistributionChart(data) {
+    if (!siteDistChart) return;
+
+    if (!data.sites || data.sites.length === 0) {
+        siteDistChart.clear();
+        document.getElementById('site-dist-summary').innerHTML = '';
+        return;
+    }
+
+    // Calculate totals for summary
+    const totalMachines = data.total_counts.reduce((sum, val) => sum + val, 0);
+    const totalDefects = data.defect_counts.reduce((sum, val) => sum + val, 0);
+
+    // Update summary display
+    const summaryEl = document.getElementById('site-dist-summary');
+    if (summaryEl) {
+        summaryEl.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+                <div style="display: flex; gap: 8px;">
+                    <span style="padding: 2px 8px; background: #e0f2fe; border-radius: 4px; font-size: 0.85rem;">
+                        <strong>全生産台数:</strong> ${totalMachines.toLocaleString()} 台
+                    </span>
+                    <span style="padding: 2px 8px; background: #fee2e2; border-radius: 4px; font-size: 0.85rem;">
+                        <strong>不具合発生数:</strong> ${totalDefects.toLocaleString()} 件
+                    </span>
+                </div>
+            </div>
+        `;
+    }
+
+    // Calculate defect rates
+    const rates = data.total_counts.map((total, i) => {
+        return total > 0 ? ((data.defect_counts[i] / total) * 100).toFixed(2) : 0;
+    });
+
+    const option = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: function (params) {
+                let result = `<strong>${params[0].name}</strong><br/>`;
+                params.forEach(param => {
+                    if (param.seriesName === '不具合発生率') {
+                        result += `${param.marker} ${param.seriesName}: ${param.value}%<br/>`;
+                    } else {
+                        result += `${param.marker} ${param.seriesName}: ${param.value} 台<br/>`;
+                    }
+                });
+                return result;
+            }
+        },
+        legend: {
+            data: ['全生産台数', '不具合発生台数', '不具合発生率']
+        },
+        grid: {
+            left: '3%',
+            right: '25%',
+            bottom: '10%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'category',
+            data: data.sites,
+            axisLabel: {
+                rotate: 0,
+                fontSize: 12
+            }
+        },
+        yAxis: [
+            {
+                type: 'value',
+                name: '生産台数',
+                position: 'left',
+                axisLine: { show: true, lineStyle: { color: '#9ca3af' } },
+                axisLabel: { color: '#9ca3af' }
+            },
+            {
+                type: 'value',
+                name: '不具合台数',
+                position: 'right',
+                axisLine: { show: true, lineStyle: { color: '#ef4444' } },
+                axisLabel: { color: '#ef4444' },
+                splitLine: { show: false }
+            },
+            {
+                type: 'value',
+                name: '発生率 %',
+                position: 'right',
+                offset: 70,
+                axisLine: { show: true, lineStyle: { color: '#10b981' } },
+                axisLabel: { formatter: '{value} %', color: '#10b981' },
+                splitLine: { show: false }
+            }
+        ],
+        series: [
+            {
+                name: '全生産台数',
+                type: 'bar',
+                yAxisIndex: 0,
+                data: data.total_counts,
+                itemStyle: { color: '#9ca3af' },
+                barGap: '-100%',
+                barWidth: '50%',
+                z: 1
+            },
+            {
+                name: '不具合発生台数',
+                type: 'bar',
+                yAxisIndex: 1,
+                data: data.defect_counts,
+                itemStyle: { color: '#ef4444' },
+                barWidth: '25%',
+                z: 2
+            },
+            {
+                name: '不具合発生率',
+                type: 'line',
+                yAxisIndex: 2,
+                data: rates,
+                itemStyle: { color: '#10b981' },
+                symbol: 'circle',
+                symbolSize: 6,
+                lineStyle: { width: 2 },
+                z: 3
+            }
+        ]
+    };
+
+    siteDistChart.setOption(option);
+}
+
 
 function copySelectedMachines() {
     const selected = Array.from(document.querySelectorAll('.machine-checkbox:checked'))

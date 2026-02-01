@@ -744,3 +744,83 @@ async def get_dashboard_stats(db: AsyncSession) -> Dict[str, Any]:
         "alert_start_date": week_ago.isoformat(),
         "alert_end_date": today.isoformat()
     }
+
+
+async def get_manufacturing_site_distribution(
+    db: AsyncSession,
+    series: Optional[str],
+    models: List[str],
+    start_date: date,
+    end_date: date,
+    defect_categories: List[str] = [],
+    defect_code: str = "",
+) -> Dict[str, Any]:
+    """製造拠点別分布データ（チャート用）を取得"""
+    
+    # Query to get defect counts by manufacturing site
+    defect_stmt = (
+        select(
+            Machine.manufacturing_site.label("site"),
+            func.count(Event.id).label("defect_count"),
+        )
+        .join(Machine)
+        .where(Event.event_type == "不具合発生")
+        .where(Event.event_date >= start_date)
+        .where(Event.event_date <= end_date)
+        .where(Machine.manufacturing_site.is_not(None))
+    )
+    
+    if series:
+        defect_stmt = defect_stmt.where(Machine.model_series == series)
+    if models:
+        defect_stmt = defect_stmt.where(Machine.model_number.in_(models))
+    if defect_categories:
+        defect_stmt = defect_stmt.where(Event.event_category.in_(defect_categories))
+    if defect_code:
+        defect_stmt = defect_stmt.where(Event.event_code.contains(defect_code))
+    
+    defect_stmt = defect_stmt.group_by("site").order_by("site")
+    
+    defect_result = await db.execute(defect_stmt)
+    defect_rows = defect_result.all()
+    
+    # Query to get total machine counts by manufacturing site
+    total_stmt = (
+        select(
+            Machine.manufacturing_site.label("site"),
+            func.count(Machine.id).label("total_count"),
+        )
+        .where(Machine.manufacturing_site.is_not(None))
+    )
+    
+    if series:
+        total_stmt = total_stmt.where(Machine.model_series == series)
+    if models:
+        total_stmt = total_stmt.where(Machine.model_number.in_(models))
+    
+    total_stmt = total_stmt.group_by("site").order_by("site")
+    
+    total_result = await db.execute(total_stmt)
+    total_rows = total_result.all()
+    
+    # Build maps
+    defect_by_site = {row.site: row.defect_count for row in defect_rows}
+    total_by_site = {row.site: row.total_count for row in total_rows}
+    
+    # Get all sites in scope
+    all_sites = sorted(set(defect_by_site.keys()) | set(total_by_site.keys()))
+    
+    sites = []
+    defect_counts = []
+    total_counts = []
+    
+    for site in all_sites:
+        sites.append(site)
+        defect_counts.append(defect_by_site.get(site, 0))
+        total_counts.append(total_by_site.get(site, 0))
+    
+    return {
+        "sites": sites,
+        "defect_counts": defect_counts,
+        "total_counts": total_counts,
+    }

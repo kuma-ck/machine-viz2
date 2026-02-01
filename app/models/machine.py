@@ -15,6 +15,7 @@ class Machine(Base):
     machine_number: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     model_series: Mapped[str] = mapped_column(String(50), index=True)
     model_number: Mapped[str] = mapped_column(String(50), index=True)
+    manufacturing_site: Mapped[Optional[str]] = mapped_column(String(50), index=True, nullable=True) # 東京工場, 大阪工場 etc.
     manufacture_month: Mapped[date] = mapped_column(Date)
     operation_start_month: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     option_config: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON形式

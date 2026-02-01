@@ -132,3 +132,30 @@ async def get_manufacturing_distribution(
         defect_code=request.defect_code,
     )
 
+
+@router.post("/api/distribution/site")
+async def get_manufacturing_site_distribution(
+    request: TrendRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """製造拠点別分布データ取得"""
+    if settings.USE_DUMMY_DATA:
+        return dummy_data.get_manufacturing_site_distribution(
+            series=request.series,
+            models=request.models,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            defect_categories=request.defect_categories,
+            defect_code=request.defect_code,
+        )
+    
+    # Real DB
+    return await crud.get_manufacturing_site_distribution(
+        db,
+        series=request.series,
+        models=request.models,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        defect_categories=request.defect_categories,
+        defect_code=request.defect_code,
+    )

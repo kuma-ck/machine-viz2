@@ -1124,3 +1124,27 @@ def get_cross_section_boxplot(
         "box_data": result_groups[0]["box_data"]
     }
 
+
+def get_manufacturing_site_distribution(
+    series: Optional[str] = None,
+    models: List[str] = [],
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    defect_categories: List[str] = [],
+    defect_code: Optional[str] = "",
+) -> Dict[str, Any]:
+    """製造拠点別分布データのダミー生成"""
+    
+    sites = ["東京工場", "大阪工場", "福岡工場", "名古屋工場", "札幌工場"]
+    
+    # Generate random counts
+    rng = random.Random(f"{series}_{models}_site_dist")
+    
+    total_counts = [rng.randint(500, 3000) for _ in sites]
+    defect_counts = [int(total * rng.uniform(0.01, 0.05)) for total in total_counts]
+    
+    return {
+        "sites": sites,
+        "defect_counts": defect_counts,
+        "total_counts": total_counts,
+    }

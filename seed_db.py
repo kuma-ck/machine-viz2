@@ -5,20 +5,24 @@ from datetime import date, timedelta
 from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import async_session_maker
-from app.models import Machine, Event
+from app.database import async_session_maker, init_db
+from app.models import Machine, Event, PatrolResult
 from app.services import dummy_data
 
+SITES = ["東京工場", "大阪工場", "福岡工場", "名古屋工場", "札幌工場"]
 # Constants from dummy_data (explicitly redefining for script independence if needed, but import is better)
 # But I'll use dummy_data constants where possible to match app logic.
 
 async def seed_data():
+    print("Initializing database...")
+    await init_db()
+    
     print("Starting database seeding...")
     
     async with async_session_maker() as db:
         # 1. Generate Machines
         machines = []
-        machine_count = 10000
+        machine_count = 50000
         start_date_range = date(2020, 1, 1)
         end_date_range = date.today()
         days_range = (end_date_range - start_date_range).days
@@ -40,6 +44,7 @@ async def seed_data():
                 machine_number=machine_number,
                 model_series=series,
                 model_number=model,
+                manufacturing_site=random.choice(SITES),
                 manufacture_month=manufacture_month,
                 operation_start_month=manufacture_month + timedelta(days=random.randint(30, 90)),
                 current_fw_version=random.choice(dummy_data.FW_VERSIONS),
@@ -111,6 +116,54 @@ async def seed_data():
             db.add_all(events)
             await db.commit()
             print(f"Inserted remaining {len(events)} events (Total: {count})")
+
+        # 3. Generate Patrol Results
+        print("Generating patrol results...")
+        patrol_results = []
+        patrol_count = 0
+        
+        # Determine date range for patrol (e.g., last 30 days)
+        today = date.today()
+        start_patrol = today - timedelta(days=30)
+        
+        # Pick random machines for patrol results
+        # Only use 5000 random machines for patrol
+        patrol_machines = random.sample(machine_rows, min(len(machine_rows), 5000))
+        
+        for m_id, m_num, m_series, m_mfg_date in patrol_machines:
+            # Random date within last 30 days
+            p_date = start_patrol + timedelta(days=random.randint(0, 30))
+            
+            # 50% chance of alert
+            is_alert = random.choice([True, False])
+            rank = "A" if is_alert else random.choice(["B", "C"])
+            
+            patrol_results.append(PatrolResult(
+                patrol_date=p_date,
+                rank=rank,
+                series=m_series,
+                model=m_num.split("-")[1], # Extract model from machine number string or use helper
+                machine_id=m_num, # PatrolResult uses machine_number string as machine_id
+                defect_category=random.choice(dummy_data.EVENT_CATEGORIES),
+                defect_code=random.choice(dummy_data.DEFECT_CODES),
+                defect_count=random.randint(1, 10) if is_alert else 0,
+                logic_content="AI検知: パターン異常" if is_alert else "定期点検: 異常なし",
+                alert_flag=is_alert,
+                description="自動生成されたパトロール結果"
+            ))
+            patrol_count += 1
+            
+            if len(patrol_results) >= 1000:
+                db.add_all(patrol_results)
+                await db.commit()
+                patrol_results = []
+        
+        if patrol_results:
+            db.add_all(patrol_results)
+            await db.commit()
+            
+        print(f"Inserted {patrol_count} patrol results.")
+
             
     print("Seeding completed.")
 
