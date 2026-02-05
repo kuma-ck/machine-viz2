@@ -8,11 +8,24 @@
     <header class="toolbar">
         <div class="toolbar-left">
             <div class="toolbar-group">
-                <select id="preset-select" class="form-select form-select-sm">
-                    <option value="">プリセット</option>
-                </select>
-                <button id="save-preset-btn" class="btn btn-sm btn-secondary" title="保存">💾</button>
-                <button id="delete-preset-btn" class="btn btn-sm btn-secondary" title="削除">🗑</button>
+                <div class="dropdown-menu-container">
+                    <button id="preset-btn" class="btn btn-sm btn-outline-secondary">
+                        <span style="color: #fbbf24;">★</span> プリセット
+                    </button>
+                    <div id="preset-menu" class="dropdown-menu hidden"
+                        style="left: 0; right: auto; transform: none; min-width: 250px;">
+                        <div class="preset-header">
+                            <input type="text" id="preset-name-input" placeholder="プリセット名を入力"
+                                class="form-input form-input-sm">
+                            <button id="save-preset-btn" class="btn btn-xs btn-primary">保存</button>
+                        </div>
+                        <div class="preset-list-label">保存済みプリセット</div>
+                        <div id="preset-list" class="preset-list">
+                            <!-- JSで生成 -->
+                            <div class="empty-message">保存されたプリセットはありません</div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="toolbar-divider"></div>
             <div class="toolbar-group">
@@ -93,19 +106,10 @@
             <button id="add-series-btn" class="btn btn-sm btn-secondary" title="系列を追加">+ 系列を追加</button>
         </div>
 
-        <!-- 下段：表示設定（グラフ、X軸、アノテーション） -->
+        <!-- 下段：表示設定（X軸、アノテーション） -->
         <div class="filter-row-secondary">
-            <div class="filter-group">
-                <label>グラフ</label>
-                <div class="btn-toggle">
-                    <input type="radio" name="chart-type" value="line" id="chart-line" checked>
-                    <label for="chart-line">折れ線</label>
-                    <input type="radio" name="chart-type" value="color" id="chart-color">
-                    <label for="chart-color">カラー</label>
-                </div>
-            </div>
+            <!-- グラフタイプは変数タイプから自動決定のため削除 -->
 
-            <div class="filter-divider"></div>
 
             <div class="filter-group">
                 <label>X軸</label>

@@ -66,22 +66,31 @@ def preprocess_data(df: pd.DataFrame, target_col: str):
     # Heuristic: Drop ID-like columns to prevent overfitting
     # 1. Drop if name contains 'id', 'no', 'code' AND has high cardinality (>90% unique)
     cols_to_drop = []
+    dropped_reasons = [] # List of {variable: str, reason: str}
+
     for col in X_raw.columns:
+        reason = None
         # High cardinality filtering for categorical/object/string
         is_text = pd.api.types.is_string_dtype(X_raw[col]) or pd.api.types.is_object_dtype(X_raw[col]) or pd.api.types.is_categorical_dtype(X_raw[col])
         
         if is_text:
             n_unique = X_raw[col].nunique()
             n_rows = len(X_raw)
-            if n_unique == n_rows or (n_unique > n_rows * 0.9 and ('id' in col.lower() or 'no' in col.lower() or 'code' in col.lower())):
-               cols_to_drop.append(col)
+            if n_unique == n_rows:
+                reason = "High Cardinality (Unique ID)"
+            elif n_unique > n_rows * 0.9 and ('id' in col.lower() or 'no' in col.lower() or 'code' in col.lower()):
+                 reason = "High Cardinality (ID-like)"
         
         # Also drop if only 1 unique value (constant)
         if X_raw[col].nunique() <= 1:
-             cols_to_drop.append(col)
+             reason = "Constant Value"
              
+        if reason:
+            cols_to_drop.append(col)
+            dropped_reasons.append({"variable": col, "reason": reason})
+
     if cols_to_drop:
-        print(f"Dropping high-cardinality/id columns: {cols_to_drop}")
+        print(f"Dropping columns: {cols_to_drop}")
         X_raw = X_raw.drop(columns=cols_to_drop)
 
     # Separate numeric and categorical cols
@@ -111,7 +120,7 @@ def preprocess_data(df: pd.DataFrame, target_col: str):
     # Store variable mapping (original -> encoded) for interpretation could be added here
     # For now, we work with encoded names.
     
-    return X, y, X_raw # Return X_raw for visualization purposes if needed? 
+    return X, y, X_raw, dropped_reasons # Return X_raw for visualization purposes if needed? 
 
 def get_distribution_stats(df, col, y, target_col="defect"):
     """
@@ -185,7 +194,7 @@ def analyze_dataset(df: pd.DataFrame, target_col: str = "defect_flag", manual_mo
         else:
              raise ValueError("Target column not specified and could not be auto-detected.")
 
-    X, y, X_raw = preprocess_data(df, target_col)
+    X, y, X_raw, excluded_vars = preprocess_data(df, target_col)
     
     n_defect = y.sum()
     n_total = len(y)
@@ -251,7 +260,8 @@ def analyze_dataset(df: pd.DataFrame, target_col: str = "defect_flag", manual_mo
         "n_total": int(n_total),
         "n_defect": int(n_defect),
         "target_col": target_col,
-        "ranking": results
+        "ranking": results,
+        "excluded_variables": excluded_vars
     }
 
 # -----------------------------------------------------------------------------

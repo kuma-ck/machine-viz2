@@ -50,7 +50,9 @@ async function initFilters() {
     const pCode = params.get('code');
     const pStart = params.get('start');
     const pEnd = params.get('end');
-    const pModel = params.get('model');
+    const pModels = params.getAll('model'); // array of models
+    const pModel = params.get('model'); // backward compatibility if needed, but getAll handles single too if duplicate keys. 
+    // Note: URLSearchParams.getAll returns [] if not found.
 
     // Date defaults - 2年間をデフォルトに
     const today = new Date();
@@ -77,17 +79,23 @@ async function initFilters() {
     if (pSeries) {
         await updateModelList();
 
-        // Handle Model Param
-        if (pModel) {
+        // Handle Model Param (support multiple or single)
+        // If pModels has items, used that. If not but pModel exists (legacy single), use that.
+        let targetModels = pModels;
+        if (targetModels.length === 0 && pModel) targetModels = [pModel];
+
+        if (targetModels.length > 0) {
             const checkboxes = document.querySelectorAll('.model-checkbox');
             // Uncheck all first
             checkboxes.forEach(cb => cb.checked = false);
 
-            // Check specific model
-            const target = Array.from(checkboxes).find(cb => cb.value === pModel);
-            if (target) {
-                target.checked = true;
-            }
+            // Check specific models
+            targetModels.forEach(m => {
+                const target = Array.from(checkboxes).find(cb => cb.value === m);
+                if (target) {
+                    target.checked = true;
+                }
+            });
             updateModelButtonText();
         }
 
@@ -114,6 +122,7 @@ async function initFilters() {
             }
             state.currentPage = 1;
             loadData();
+            updateURL(); // Update URL on search
         });
     }
 
@@ -136,6 +145,7 @@ async function initFilters() {
 
             state.currentPage = 1;
             loadData();
+            updateURL(); // Clear URL query
             showToast('フィルタ条件をリセットしました', 'info');
         });
     }
@@ -182,6 +192,20 @@ async function initFilters() {
             });
         });
     }
+
+    // --- New Features ---
+
+    // Copy URL Button
+    const copyUrlBtn = document.getElementById('copy-url-btn');
+    if (copyUrlBtn) {
+        copyUrlBtn.addEventListener('click', () => {
+            updateURL();
+            copyToClipboard(window.location.href);
+        });
+    }
+
+    // Preset Features
+    initPresets();
 }
 
 function initGranularityToggle() {
@@ -899,4 +923,239 @@ function renderPagination() {
 
     if (prevBtn) prevBtn.disabled = (page <= 1);
     if (nextBtn) nextBtn.disabled = (page >= totalPages);
+}
+
+
+// --- URL & Preset Functions ---
+
+function updateURL() {
+    const series = document.getElementById('series-select').value;
+    const category = document.getElementById('category-select').value;
+    const code = document.getElementById('code-select').value;
+    const startDate = document.getElementById('start-date').value;
+    const endDate = document.getElementById('end-date').value;
+
+    // Get all checked models
+    const selectedModels = Array.from(document.querySelectorAll('.model-checkbox:checked'))
+        .map(cb => cb.value);
+
+    const params = new URLSearchParams();
+    if (series) params.set('series', series);
+    if (category) params.set('category', category);
+    if (code) params.set('code', code);
+    if (startDate) params.set('start', startDate);
+    if (endDate) params.set('end', endDate);
+
+    // Set multiple model params
+    selectedModels.forEach(m => params.append('model', m));
+
+    // Update history without reload
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.pushState({ path: newUrl }, '', newUrl);
+}
+
+function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        // secure context (HTTPS or localhost)
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('URLをクリップボードにコピーしました', 'info');
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            showToast('コピーに失敗しました', 'error');
+        });
+    } else {
+        // Fallback
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "absolute";
+        textArea.style.left = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showToast('URLをクリップボードにコピーしました', 'info');
+        } catch (err) {
+            console.error('Failed to copy', err);
+            showToast('コピーに失敗しました', 'error');
+        }
+        document.body.removeChild(textArea);
+    }
+}
+
+// --- Presets ---
+
+function initPresets() {
+    const presetBtn = document.getElementById('preset-btn');
+    const presetMenu = document.getElementById('preset-menu');
+    const saveBtn = document.getElementById('save-preset-btn');
+    const nameInput = document.getElementById('preset-name-input');
+
+    if (!presetBtn || !presetMenu) return;
+
+    // Toggle menu
+    presetBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        presetMenu.classList.toggle('hidden');
+        renderPresetMenu(); // Refresh list on open
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        if (!presetBtn.contains(e.target) && !presetMenu.contains(e.target)) {
+            presetMenu.classList.add('hidden');
+        }
+    });
+
+    // Don't close when clicking inside menu
+    presetMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    // Save Preset
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            if (!name) {
+                showToast('プリセット名を入力してください', 'warning');
+                return;
+            }
+            savePreset(name);
+            nameInput.value = '';
+            renderPresetMenu();
+            showToast(`プリセット「${name}」を保存しました`, 'success');
+        });
+    }
+}
+
+function getFilters() {
+    const selectedModels = Array.from(document.querySelectorAll('.model-checkbox:checked'))
+        .map(cb => cb.value);
+
+    return {
+        series: document.getElementById('series-select').value,
+        models: selectedModels,
+        category: document.getElementById('category-select').value,
+        code: document.getElementById('code-select').value,
+        startDate: document.getElementById('start-date').value,
+        endDate: document.getElementById('end-date').value
+    };
+}
+
+function setFilters(filters) {
+    if (!filters) return;
+
+    // Series
+    const seriesSelect = document.getElementById('series-select');
+    seriesSelect.value = filters.series || 'A';
+
+    // Must update models list based on series first
+    updateModelList().then(() => {
+        // Restore models
+        const checkboxes = document.querySelectorAll('.model-checkbox');
+        checkboxes.forEach(cb => cb.checked = false);
+
+        if (filters.models && Array.isArray(filters.models)) {
+            filters.models.forEach(m => {
+                const target = Array.from(checkboxes).find(cb => cb.value === m);
+                if (target) target.checked = true;
+            });
+        }
+        updateModelButtonText();
+
+        // Other filters
+        document.getElementById('category-select').value = filters.category || '';
+        document.getElementById('code-select').value = filters.code || '';
+        if (filters.startDate) document.getElementById('start-date').value = filters.startDate;
+        if (filters.endDate) document.getElementById('end-date').value = filters.endDate;
+
+        // Reload data
+        state.currentPage = 1;
+        loadData();
+        // Update URL to reflect loaded preset
+        setTimeout(updateURL, 500);
+    });
+}
+
+function savePreset(name) {
+    const presets = loadPresetsFromStorage();
+    const newPreset = {
+        name: name,
+        filters: getFilters(),
+        timestamp: new Date().toISOString()
+    };
+
+    // Check if exists, overwrite or add
+    const existingIndex = presets.findIndex(p => p.name === name);
+    if (existingIndex >= 0) {
+        if (!confirm(`プリセット「${name}」は既に存在します。上書きしますか？`)) return;
+        presets[existingIndex] = newPreset;
+    } else {
+        presets.push(newPreset);
+    }
+
+    localStorage.setItem('defect_trend_presets', JSON.stringify(presets));
+}
+
+function loadPresetsFromStorage() {
+    try {
+        const stored = localStorage.getItem('defect_trend_presets');
+        return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+        console.warn('Failed to parse presets', e);
+        return [];
+    }
+}
+
+function deletePreset(index) {
+    const presets = loadPresetsFromStorage();
+    if (index >= 0 && index < presets.length) {
+        presets.splice(index, 1);
+        localStorage.setItem('defect_trend_presets', JSON.stringify(presets));
+        renderPresetMenu();
+    }
+}
+
+function loadPreset(preset) {
+    setFilters(preset.filters);
+    showToast(`プリセット「${preset.name}」を読み込みました`, 'info');
+    document.getElementById('preset-menu').classList.add('hidden');
+}
+
+function renderPresetMenu() {
+    const listEl = document.getElementById('preset-list');
+    if (!listEl) return;
+
+    const presets = loadPresetsFromStorage();
+    listEl.innerHTML = '';
+
+    if (presets.length === 0) {
+        listEl.innerHTML = '<div class="empty-message">保存されたプリセットはありません</div>';
+        return;
+    }
+
+    presets.forEach((p, index) => {
+        const item = document.createElement('div');
+        item.className = 'preset-item';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'preset-name';
+        nameSpan.textContent = p.name;
+        nameSpan.onclick = () => loadPreset(p);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'preset-delete-btn';
+        deleteBtn.innerHTML = '×'; // or icon
+        deleteBtn.title = '削除';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (confirm(`プリセット「${p.name}」を削除しますか？`)) {
+                deletePreset(index);
+            }
+        };
+
+        item.appendChild(nameSpan);
+        item.appendChild(deleteBtn);
+        listEl.appendChild(item);
+    });
 }

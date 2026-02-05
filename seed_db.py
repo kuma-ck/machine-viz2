@@ -164,6 +164,85 @@ async def seed_data():
             
         print(f"Inserted {patrol_count} patrol results.")
 
+        # 4. Generate CharacteristicValue (for charts on History page)
+        print("Generating characteristic values...")
+        from app.models import CharacteristicValue
+        
+        # Define categories and characteristic_ids to match dummy_data.py
+        # Using CHARACTERISTIC_IDS from dummy_data for consistency
+        char_defs = [
+            ("センサー", ["温度", "湿度", "圧力", "振動"]),
+            ("モーター", ["回転数", "トルク", "電流値"]),
+            ("通信", ["通信遅延", "パケットロス"]),
+            ("電源", ["電圧", "電流"]),
+        ]
+        
+        char_values = []
+        char_count = 0
+        
+        # Only generate for a subset of machines (e.g., 10000)
+        sample_machines = random.sample(machine_rows, min(len(machine_rows), 10000))
+        
+        for m_id, m_num, m_series, m_mfg_date in sample_machines:
+            # Generate 6-18 months of data for each machine
+            mfg_date = m_mfg_date
+            months_of_data = random.randint(6, 18)
+            
+            for category, char_ids in char_defs:
+                for char_id in char_ids:
+                    # Generate daily records for the past N months
+                    for month_offset in range(months_of_data):
+                        record_month = mfg_date + timedelta(days=30 * month_offset)
+                        if record_month > today:
+                            break
+                        
+                        # Generate 1-3 records per month (simulate sparse data)
+                        for _ in range(random.randint(1, 3)):
+                            record_day = record_month + timedelta(days=random.randint(0, 28))
+                            if record_day > today:
+                                continue
+                            
+                            # Generate appropriate value based on characteristic
+                            if "温度" in char_id:
+                                value = random.uniform(20.0, 80.0)
+                            elif "湿度" in char_id:
+                                value = random.uniform(30.0, 90.0)
+                            elif "振動" in char_id:
+                                value = random.uniform(0.1, 5.0)
+                            elif "回転数" in char_id:
+                                value = random.uniform(1000, 5000)
+                            elif "トルク" in char_id:
+                                value = random.uniform(10, 100)
+                            elif "電流" in char_id:
+                                value = random.uniform(1.0, 10.0)
+                            elif "残量" in char_id:
+                                value = random.uniform(0, 100)
+                            else:
+                                value = random.uniform(0, 100)
+                            
+                            char_values.append(CharacteristicValue(
+                                machine_id=m_id,
+                                record_date=record_day,
+                                category=category,
+                                characteristic_id=char_id,
+                                value_numeric=round(value, 2),
+                                usage_count=random.randint(1000, 100000)
+                            ))
+                            char_count += 1
+            
+            # Batch insert
+            if len(char_values) >= 5000:
+                db.add_all(char_values)
+                await db.commit()
+                char_values = []
+                print(f"Inserted {char_count} characteristic values...")
+        
+        if char_values:
+            db.add_all(char_values)
+            await db.commit()
+        
+        print(f"Inserted total {char_count} characteristic values.")
+
             
     print("Seeding completed.")
 

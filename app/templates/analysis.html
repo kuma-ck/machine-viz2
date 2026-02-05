@@ -205,6 +205,22 @@
             <div id="viz-container" style="flex: 1; width: 100%;"></div>
         </div>
     </div>
+
+    <!-- Excluded Variables Section -->
+    <div id="excluded-section" style="margin-top: 2rem; display: none;">
+        <h4 style="margin-bottom: 1rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="filter-x"></i> 除外された変数
+        </h4>
+        <div class="card" style="padding: 1rem;">
+            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                以下の変数は、解析精度への悪影響や冗長性を避けるため、自動的に除外されました。
+            </p>
+            <div id="excluded-list"
+                style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px;">
+                <!-- JS Populated -->
+            </div>
+        </div>
+    </div>
 </div>
 
 {% endblock %}

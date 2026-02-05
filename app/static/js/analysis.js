@@ -122,6 +122,30 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             rankingList.innerHTML = '<p class="text-secondary p-2">有効な変数がありませんでした。</p>';
         }
+
+        // Excluded Variables
+        if (data.excluded_variables && data.excluded_variables.length > 0) {
+            renderExcludedList(data.excluded_variables);
+        } else {
+            document.getElementById('excluded-section').style.display = 'none';
+        }
+    }
+
+    function renderExcludedList(list) {
+        const section = document.getElementById('excluded-section');
+        const container = document.getElementById('excluded-list');
+        if (!section || !container) return;
+
+        section.style.display = 'block';
+        container.innerHTML = list.map(item => `
+            <div style="background: var(--bg-surface); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 500; font-size: 0.9rem;">${item.variable}</span>
+                <span class="badge bg-light text-secondary" style="font-size: 0.75rem; border: 1px solid var(--border-color); padding: 2px 6px; border-radius: 4px;">${item.reason}</span>
+            </div>
+        `).join('');
+
+        // Refresh icons if needed (lucide is global)
+        if (window.lucide) window.lucide.createIcons();
     }
 
     function renderRankingList(ranking) {

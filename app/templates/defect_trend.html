@@ -5,7 +5,20 @@
 {% block content %}
 <div class="filter-bar">
     <!-- フィルター設定 -->
+    <!-- 1段目: フィルター項目 -->
     <div class="filter-row-primary">
+        <!-- 期間フィルター(別グループ) -->
+        <div class="filter-group"
+            style="margin-right: var(--spacing-md); padding-right: var(--spacing-md); border-right: 2px solid var(--border-color);">
+            <label style="font-weight: 600;">期間</label>
+            <div class="date-range">
+                <input type="date" id="start-date" class="form-input form-input-sm">
+                <span>～</span>
+                <input type="date" id="end-date" class="form-input form-input-sm">
+            </div>
+        </div>
+
+        <!-- その他のフィルター -->
         <div class="filter-group">
             <label>機種シリーズ</label>
             <select id="series-select" class="form-select form-select-sm">
@@ -13,11 +26,11 @@
                 <!-- JSで動的生成 -->
             </select>
         </div>
-        <div class="filter-group" style="flex-grow: 1; max-width: 400px;">
+        <div class="filter-group" style="flex-grow: 1; max-width: 300px;">
             <label>機種番号</label>
             <div class="dropdown-multiselect">
                 <button id="model-select-btn" class="form-select form-select-sm" style="text-align: left;">
-                    機種を選択（全選択中）
+                    機種を選択(全選択中)
                 </button>
                 <div id="model-dropdown" class="dropdown-content hidden">
                     <div class="dropdown-header">
@@ -46,16 +59,44 @@
                 <!-- JSで動的生成 -->
             </select>
         </div>
-        <div class="filter-group">
-            <label>期間</label>
-            <div class="date-range">
-                <input type="date" id="start-date" class="form-input form-input-sm">
-                <span>～</span>
-                <input type="date" id="end-date" class="form-input form-input-sm">
+    </div>
+
+    <!-- 2段目: アクションボタン(左右に分割) -->
+    <div class="filter-row-secondary"
+        style="display: flex; justify-content: space-between; align-items: center; padding-top: var(--spacing-sm);">
+        <!-- 左側: 主要操作ボタン -->
+        <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+            <button id="search-btn" class="btn btn-sm btn-primary">更新</button>
+            <button id="reset-btn" class="btn btn-sm btn-secondary">リセット</button>
+        </div>
+
+        <!-- 右側: 補助機能ボタン -->
+        <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+            <button id="copy-url-btn" class="btn btn-sm btn-outline-secondary" title="現在の条件でURLをコピー">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                </svg>
+                Copy URL
+            </button>
+            <div class="dropdown-menu-container">
+                <button id="preset-btn" class="btn btn-sm btn-outline-secondary">
+                    <span style="color: #fbbf24;">★</span> プリセット
+                </button>
+                <div id="preset-menu" class="dropdown-menu hidden">
+                    <div class="preset-header">
+                        <input type="text" id="preset-name-input" placeholder="プリセット名を入力"
+                            class="form-input form-input-sm">
+                        <button id="save-preset-btn" class="btn btn-xs btn-primary">保存</button>
+                    </div>
+                    <div class="preset-list-label">保存済みプリセット</div>
+                    <div id="preset-list" class="preset-list">
+                        <!-- JSで生成 -->
+                        <div class="empty-message">保存されたプリセットはありません</div>
+                    </div>
+                </div>
             </div>
         </div>
-        <button id="search-btn" class="btn btn-sm btn-primary">更新</button>
-        <button id="reset-btn" class="btn btn-sm btn-secondary">リセット</button>
     </div>
 </div>
 

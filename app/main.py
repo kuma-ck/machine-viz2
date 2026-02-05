@@ -1,4 +1,4 @@
-"""FastAPI アプリケーション """
+"""FastAPI アプリケーション  """
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse

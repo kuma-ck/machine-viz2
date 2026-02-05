@@ -1453,3 +1453,191 @@ body {
     color: var(--text-primary);
     font-weight: 500;
 }
+
+/* ===================================
+   機番履歴表示 V2 (history-container-v2)
+   =================================== */
+
+.history-container-v2 {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 80px);
+    /* Navbar + padding adjustment */
+    overflow-y: auto;
+    /* Allow scrolling if content is too tall */
+    padding: 0 var(--spacing-md) var(--spacing-md);
+    gap: var(--spacing-sm);
+}
+
+.history-container-v2 .toolbar {
+    flex-shrink: 0;
+}
+
+.history-container-v2 .filter-bar {
+    flex-shrink: 0;
+}
+
+.history-container-v2 .main-area {
+    flex: 0 0 550px;
+    /* Fixed minimum height for chart area */
+    display: flex;
+    gap: var(--spacing-md);
+    /* min-height: 0; removed to avoid crushing */
+    overflow: hidden;
+}
+
+.history-container-v2 .chart-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-color);
+    padding: var(--spacing-md);
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+    /* Fill main-area */
+}
+
+.history-container-v2 .chart-header {
+    flex-shrink: 0;
+    margin-bottom: var(--spacing-sm);
+}
+
+.history-container-v2 .main-chart {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    position: relative;
+}
+
+/* Ensure chart canvas is visible */
+.history-container-v2 .main-chart canvas {
+    border-radius: var(--border-radius);
+}
+
+.history-container-v2 .info-sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    overflow-y: auto;
+}
+
+.history-container-v2 .tables-area {
+    height: 300px;
+    flex-shrink: 0;
+}
+
+/* Fix negative positioning issues if any */
+.chart-area,
+.main-chart {
+    top: auto !important;
+    left: auto !important;
+}
+
+/* Preset Menu Styles */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dropdown-menu-container {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-lg);
+    width: 280px;
+    z-index: 1000;
+    padding: 8px;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    transition: all 0.2s ease;
+}
+
+.dropdown-menu.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    pointer-events: none;
+}
+
+.preset-header {
+    display: flex;
+    gap: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 8px;
+}
+
+.preset-header input {
+    flex: 1;
+}
+
+.preset-list-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    padding: 0 4px;
+}
+
+.preset-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.preset-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.preset-item:hover {
+    background: var(--bg-background);
+}
+
+.preset-item .preset-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.preset-delete-btn {
+    opacity: 0;
+    color: var(--text-muted);
+    padding: 2px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.preset-item:hover .preset-delete-btn {
+    opacity: 1;
+}
+
+.preset-delete-btn:hover {
+    color: var(--color-danger);
+    background: #fee2e2;
+}
+
+.empty-message {
+    padding: 12px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}

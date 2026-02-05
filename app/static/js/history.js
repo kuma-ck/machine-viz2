@@ -14,12 +14,11 @@ const state = {
     machineInfo: null,
     events: [],
     // characteristics: [], // getter/setterに移行
-    chartType: 'line',
     xAxisType: 'monthly',
     // 複数系列対応
     series: [
-        { id: 1, category: '', characteristicId: '', aggregationMethod: 'latest', data: [], visible: true },
-        { id: 2, category: '', characteristicId: '', aggregationMethod: 'latest', data: [], visible: false }
+        { id: 1, category: '', characteristicId: '', aggregationMethod: 'latest', data: [], visible: true, varType: '' },
+        { id: 2, category: '', characteristicId: '', aggregationMethod: 'latest', data: [], visible: false, varType: '' }
     ],
     // 互換性のため（主に系列1を参照）
     get category() { return this.series[0].category; },
@@ -64,14 +63,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     initCharts();
     initEventListeners();
     await loadFromURL();
-    loadPresets();
+    initPresets();
 });
 
 function initCharts() {
     const mainChartDom = document.getElementById('main-chart');
 
     if (mainChartDom) {
+        if (mainChart) mainChart.dispose();
         mainChart = echarts.init(mainChartDom);
+        console.log('Main chart initialized in initCharts');
     }
 
     // リサイズ対応
@@ -134,16 +135,8 @@ function initEventListeners() {
     document.getElementById('add-series-btn')?.addEventListener('click', () => toggleSeries2(true));
     document.getElementById('remove-series-btn')?.addEventListener('click', () => toggleSeries2(false));
 
-    // グラフタイプ変更
-    document.querySelectorAll('input[name="chart-type"]').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            state.chartType = e.target.value;
-            // カラーチャートの場合は系列2を無効化（UI上は隠すか、動作しないようにする）
-            // ここでは再描画のみ
-            renderChart();
-            updateURL();
-        });
-    });
+    // グラフタイプ変更は廃止（変数タイプに基づいて自動決定するため）
+
 
     // X軸タイプ変更
     document.getElementById('x-axis-type')?.addEventListener('change', (e) => {
@@ -217,10 +210,8 @@ function initEventListeners() {
         });
     });
 
-    // プリセット保存・削除
-    document.getElementById('save-preset-btn')?.addEventListener('click', savePreset);
-    document.getElementById('delete-preset-btn')?.addEventListener('click', deletePreset);
-    document.getElementById('preset-select')?.addEventListener('change', applyPreset);
+    // プリセット機能
+    // initPresets() で初期化されるため、ここでは何もしない
 
     // ページネーション
     document.getElementById('prev-page')?.addEventListener('click', () => changePage(-1));
@@ -285,7 +276,13 @@ function setupSeriesListeners(seriesId) {
     // 特性値選択
     document.getElementById(`characteristic-select-${seriesId}`)?.addEventListener('change', (e) => {
         const idx = seriesId - 1;
-        state.series[idx].characteristicId = e.target.value;
+        const select = e.target;
+        state.series[idx].characteristicId = select.value;
+
+        // 変数タイプを判定して設定＆UI制御
+        checkVarTypeAndToggleAggregation(seriesId);
+        console.log(`Series ${seriesId} varType: ${state.series[idx].varType}`);
+
         if (state.machineNumber) {
             loadCharacteristics();
         }
@@ -341,6 +338,13 @@ async function loadData() {
     }
 
     state.machineNumber = machineNumber;
+
+    // Clear previous data
+    state.machineInfo = null;
+    state.events = [];
+    state.series.forEach(s => s.data = []);
+    renderDetailTable(); // Clear table
+
     showLoading(true);
 
     try {
@@ -350,7 +354,26 @@ async function loadData() {
             fetch(`/history/api/events/${encodeURIComponent(machineNumber)}`),
         ]);
 
+        // レスポンスをチェック
+        if (!machineRes.ok) {
+            showToast('機番情報の取得に失敗しました', 'error');
+            state.machineInfo = null; // Ensure null
+            toggleEmptyState(true);
+            showLoading(false);
+            return;
+        }
+
         state.machineInfo = await machineRes.json();
+
+        // 機番が見つからない場合
+        if (state.machineInfo.error) {
+            showToast(`機番 ${machineNumber} が見つかりません`, 'warning');
+            state.machineInfo = null;
+            toggleEmptyState(true);
+            showLoading(false);
+            return;
+        }
+
         const eventsData = await eventsRes.json();
         state.events = eventsData.events || [];
 
@@ -371,6 +394,23 @@ async function loadData() {
 
         if (hasSeries1 || hasSeries2) {
             await loadCharacteristics();
+        } else {
+            // 機番情報は読み込めたが、系列が選択されていない場合
+            if (state.machineInfo) {
+                toggleEmptyState(false);
+                const chartDom = document.getElementById('main-chart');
+                if (chartDom) {
+                    chartDom.style.display = 'flex'; // 表示する
+                    chartDom.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:100%; width:100%; color:#888; font-weight:bold; font-size: 1.2rem;">カテゴリーと特性値を選択してグラフを表示してください</div>';
+                    // Reset chart instance if exists
+                    if (mainChart) {
+                        mainChart.dispose();
+                        mainChart = null;
+                    }
+                }
+            } else {
+                toggleEmptyState(true);
+            }
         }
 
         // URLを更新
@@ -659,18 +699,48 @@ function renderEventsTable() {
 }
 
 function renderChart() {
+    // Ensure chart is initialized
+    if (!mainChart) {
+        const dom = document.getElementById('main-chart');
+        if (dom) {
+            mainChart = echarts.init(dom);
+        }
+    }
+
     const hasData = state.series.some(s => s.visible && s.data.length > 0);
     if (!mainChart || !hasData) {
         mainChart?.clear();
         return;
     }
 
-    if (state.chartType === 'line') {
+    const visibleSeries = state.series.filter(s => s.visible && s.data.length > 0);
+
+    // 各系列の表示タイプを決定（varTypeが未設定の場合はデータから判定）
+    visibleSeries.forEach(s => {
+        if (!s.varType) {
+            // データから判定：value_textがあり、かつvalue_numericがない場合は質的変数
+            s.varType = s.data.some(d => d.value_text && d.value_numeric == null) ? 'qualitative' : 'quantitative';
+        }
+    });
+
+    const types = visibleSeries.map(s => s.varType);
+    console.log('Render chart with types:', types);
+
+    // 表示パターンに応じて描画
+    if (mainChart) mainChart.clear();
+
+    if (types.every(t => t === 'quantitative')) {
+        // 全て量的変数 → 折れ線チャート（2軸対応）
         renderLineChart();
+    } else if (types.every(t => t === 'qualitative')) {
+        // 全て質的変数 → カラーチャート（複数行対応）
+        renderDualColorChart(visibleSeries);
     } else {
-        renderColorChart();
+        // 混合 → 折れ線＋カラーバー
+        renderMixedChart(visibleSeries);
     }
 }
+
 
 function renderLineChart() {
     // 表示対象の系列を取得
@@ -1225,6 +1295,344 @@ function renderColorChart() {
     }
 }
 
+/**
+ * 質的変数×2用のカラーチャート（上下に2行配置）
+ */
+/**
+ * 質的変数×2用のカラーチャート（上下に2行配置）
+ */
+function renderDualColorChart(visibleSeries) {
+    // X軸データの統合
+    const allXValues = new Set();
+    visibleSeries.forEach(s => {
+        s.data.forEach(d => {
+            const xVal = state.xAxisType === 'usage' ? d.usage_count : d.record_date;
+            allXValues.add(xVal);
+        });
+    });
+    const xAxisData = Array.from(allXValues).sort((a, b) => {
+        if (state.xAxisType === 'usage') return Number(a) - Number(b);
+        return String(a).localeCompare(String(b));
+    });
+
+    // イベントデータ作成
+    const eventCategories = ['FW更新', '部品交換', 'メンテナンス', '不具合発生'];
+    const eventSeriesData = createEventSeriesData(xAxisData, eventCategories);
+
+    // 色マップ
+    const colorMap = {
+        '正常': '#10b981', '要注意': '#f59e0b', 'やや劣化': '#f59e0b',
+        '異常': '#ef4444', '劣化': '#ef4444', '要交換': '#ef4444',
+        '接続中': '#10b981', '断続的': '#f59e0b', '切断': '#ef4444',
+        '安定': '#10b981', '不安定': '#f59e0b', '低電圧': '#ef4444',
+    };
+    const defaultColors = ['#10b981', '#f59e0b', '#ef4444', '#6b7280'];
+
+    // 各系列のヒートマップデータ作成
+    const seriesConfigs = visibleSeries.map((s, i) => {
+        const values = [...new Set(s.data.map(d => d.value_text).filter(Boolean))];
+        const dataMap = new Map();
+        s.data.forEach(d => {
+            const xVal = state.xAxisType === 'usage' ? d.usage_count : d.record_date;
+            dataMap.set(xVal, d.value_text);
+        });
+
+        return {
+            name: `${s.category}/${s.characteristicId}`,
+            values,
+            data: xAxisData.map((x, idx) => ({
+                value: [idx, 1, dataMap.get(x) || ''],
+            })),
+            colors: values.map((v, j) => colorMap[v] || defaultColors[j % defaultColors.length]),
+        };
+    });
+
+    // レイアウト設定（1系列か2系列かで分岐）
+    let grids = [];
+    let eventGridIndex;
+
+    if (visibleSeries.length === 1) {
+        // 1系列：メインを大きく表示
+        grids = [
+            { left: '100', right: '4%', height: '40%', top: '15%' },
+            { left: '100', right: '4%', top: '65%', height: '15%' }
+        ];
+        eventGridIndex = 1;
+    } else {
+        // 2系列：上下に分割
+        grids = [
+            { left: '100', right: '4%', height: '20%', top: '15%' },
+            { left: '100', right: '4%', height: '20%', top: '40%' },
+            { left: '100', right: '4%', top: '65%', height: '12%' }
+        ];
+        eventGridIndex = 2;
+    }
+
+    // データズーム用のインデックス配列
+    const axisIndices = Array.from({ length: eventGridIndex + 1 }, (_, i) => i);
+
+    const option = {
+        tooltip: {
+            trigger: 'item',
+            formatter: (params) => {
+                if (params.seriesType === 'bar') {
+                    return `${params.seriesName}<br/>状態: ${params.value[2] || '-'}`;
+                } else if (params.data?.eventInfo) {
+                    const event = params.data.eventInfo;
+                    return `<strong>${event.event_type}</strong><br/>日付: ${event.event_date}<br/>${event.description || ''}`;
+                }
+            },
+        },
+        legend: { show: true, data: seriesConfigs.map(s => s.name), top: 5 },
+        grid: grids,
+        xAxis: [
+            ...visibleSeries.map((_, i) => ({
+                gridIndex: i,
+                type: 'category',
+                data: xAxisData,
+                axisLabel: { show: false },
+                axisTick: { show: false }
+            })),
+            { gridIndex: eventGridIndex, type: 'category', data: xAxisData, position: 'bottom' }
+        ],
+        yAxis: [
+            ...seriesConfigs.map((s, i) => ({
+                gridIndex: i,
+                type: 'value',
+                name: s.name,
+                min: 0,
+                max: 1,
+                axisLabel: { show: false },
+                splitLine: { show: false }
+            })),
+            {
+                gridIndex: eventGridIndex,
+                type: 'category',
+                data: eventCategories,
+                axisLine: { show: false },
+                axisTick: { show: false },
+                splitLine: { show: true, lineStyle: { type: 'dashed' } }
+            }
+        ],
+        visualMap: seriesConfigs.map((s, i) => ({
+            show: true,
+            type: 'piecewise',
+            categories: s.values,
+            inRange: { color: s.colors },
+            orient: 'horizontal',
+            right: 10,
+            top: i * 30, // 重ならないようにずらす（簡易対応）
+            dimension: 2,
+            seriesIndex: i,
+        })),
+        dataZoom: [
+            { type: 'inside', xAxisIndex: axisIndices, start: 0, end: 100 },
+            { type: 'slider', xAxisIndex: axisIndices, start: 0, end: 100, bottom: 10, height: 30 },
+        ],
+        series: [
+            ...seriesConfigs.map((s, i) => ({
+                name: s.name,
+                type: 'bar',
+                xAxisIndex: i,
+                yAxisIndex: i,
+                barCategoryGap: '0%',
+                data: s.data,
+            })),
+            { name: 'イベント', type: 'scatter', xAxisIndex: eventGridIndex, yAxisIndex: eventGridIndex, symbolSize: 10, data: eventSeriesData }
+        ]
+    };
+
+    mainChart.setOption(option, true);
+}
+
+/**
+ * 量的＋質的混合用チャート（折れ線＋カラーバー）
+ */
+function renderMixedChart(visibleSeries) {
+    // 量的・質的を分離
+    const quantSeries = visibleSeries.filter(s => s.varType === 'quantitative');
+    const qualSeries = visibleSeries.filter(s => s.varType === 'qualitative');
+
+    // X軸データの統合
+    const allXValues = new Set();
+    visibleSeries.forEach(s => {
+        s.data.forEach(d => {
+            const xVal = state.xAxisType === 'usage' ? d.usage_count : d.record_date;
+            allXValues.add(xVal);
+        });
+    });
+    const xAxisData = Array.from(allXValues).sort((a, b) => {
+        if (state.xAxisType === 'usage') return Number(a) - Number(b);
+        return String(a).localeCompare(String(b));
+    });
+
+    // イベントデータ
+    const eventCategories = ['FW更新', '部品交換', 'メンテナンス', '不具合発生'];
+    const eventSeriesData = createEventSeriesData(xAxisData, eventCategories);
+
+    // 色マップ
+    const colorMap = {
+        '正常': '#10b981', '要注意': '#f59e0b', 'やや劣化': '#f59e0b',
+        '異常': '#ef4444', '劣化': '#ef4444', '要交換': '#ef4444',
+        '接続中': '#10b981', '断続的': '#f59e0b', '切断': '#ef4444',
+        '安定': '#10b981', '不安定': '#f59e0b', '低電圧': '#ef4444',
+    };
+    const defaultColors = ['#10b981', '#f59e0b', '#ef4444', '#6b7280'];
+
+    // 量的変数の折れ線データ
+    const lineSeriesData = quantSeries.map(s => {
+        const dataMap = new Map();
+        s.data.forEach(d => {
+            const xVal = state.xAxisType === 'usage' ? d.usage_count : d.record_date;
+            dataMap.set(xVal, d.value_numeric);
+        });
+        return {
+            name: `${s.category}/${s.characteristicId}`,
+            data: xAxisData.map(x => dataMap.get(x) ?? null),
+        };
+    });
+
+    // 質的変数のカラーバーデータ
+    const colorBarData = qualSeries.map(s => {
+        const values = [...new Set(s.data.map(d => d.value_text).filter(Boolean))];
+        const dataMap = new Map();
+        s.data.forEach(d => {
+            const xVal = state.xAxisType === 'usage' ? d.usage_count : d.record_date;
+            dataMap.set(xVal, d.value_text);
+        });
+        return {
+            name: `${s.category}/${s.characteristicId}`,
+            values,
+            data: xAxisData.map((x, idx) => ({
+                value: [idx, 1, dataMap.get(x) || ''] // 高さ1に設定
+            })),
+            colors: values.map((v, i) => colorMap[v] || defaultColors[i % defaultColors.length]),
+        };
+    });
+
+    // グリッドレイアウト（上：折れ線、中：カラーバー、下：イベント）
+    // 量的のみ、質的のみの場合は考慮せず固定レイアウトで良い（実際には分岐で呼ばれないため）
+    const grids = [
+        { left: '100', right: '4%', height: '40%', top: '10%' }, // Grid 0 (Line)
+        { left: '100', right: '4%', height: '15%', top: '55%' }, // Grid 1 (Bar)
+        { left: '100', right: '4%', top: '75%', height: '12%' }  // Grid 2 (Event)
+    ];
+
+    // データズーム用のインデックス
+    const axisIndices = [0, 1, 2];
+
+    const option = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'cross' },
+            formatter: (params) => {
+                if (!Array.isArray(params)) return '';
+                let html = `${params[0]?.axisValue || ''}<br/>`;
+                params.forEach(p => {
+                    if (p.seriesType === 'line' && p.value != null) {
+                        html += `${p.marker} ${p.seriesName}: ${p.value}<br/>`;
+                    } else if (p.seriesType === 'bar') {
+                        const val = p.value[2]; // [index, 1, text]
+                        if (val) html += `${p.marker} ${p.seriesName}: ${val}<br/>`;
+                    }
+                });
+                return html;
+            }
+        },
+        legend: {
+            show: true,
+            data: [...lineSeriesData.map(s => s.name), ...colorBarData.map(s => s.name)],
+            top: 0
+        },
+        axisPointer: { link: { xAxisIndex: 'all' } },
+        grid: grids,
+        xAxis: [
+            // Grid 0: Line
+            { gridIndex: 0, type: 'category', data: xAxisData, axisLabel: { show: false }, axisTick: { show: false } },
+            // Grid 1: Bar
+            { gridIndex: 1, type: 'category', data: xAxisData, axisLabel: { show: false }, axisTick: { show: false } },
+            // Grid 2: Event (Labelあり)
+            { gridIndex: 2, type: 'category', data: xAxisData, position: 'bottom' }
+        ],
+        yAxis: [
+            // Grid 0: Line
+            { gridIndex: 0, type: 'value', name: lineSeriesData[0]?.name || '', position: 'left' },
+            // Grid 1: Bar (0-1)
+            { gridIndex: 1, type: 'value', min: 0, max: 1, axisLabel: { show: false }, splitLine: { show: false } },
+            // Grid 2: Event
+            { gridIndex: 2, type: 'category', data: eventCategories, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: true, lineStyle: { type: 'dashed' } } }
+        ],
+        visualMap: colorBarData.map((s, i) => ({
+            show: true,
+            type: 'piecewise',
+            categories: s.values,
+            inRange: { color: s.colors },
+            orient: 'horizontal',
+            right: 10,
+            top: (i + 1) * 20, // 簡易配置
+            dimension: 2,
+            seriesIndex: lineSeriesData.length + i, // Lineの後に続くBarのインデックス
+        })),
+        dataZoom: [
+            { type: 'inside', xAxisIndex: axisIndices, start: 0, end: 100 },
+            { type: 'slider', xAxisIndex: axisIndices, start: 0, end: 100, bottom: 10, height: 30 },
+        ],
+        series: [
+            ...lineSeriesData.map(s => ({
+                name: s.name,
+                type: 'line',
+                xAxisIndex: 0,
+                yAxisIndex: 0,
+                showSymbol: false,
+                data: s.data,
+            })),
+            ...colorBarData.map(s => ({
+                name: s.name,
+                type: 'bar',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                barCategoryGap: '0%',
+                data: s.data,
+                itemStyle: { borderWidth: 0 }
+            })),
+            { name: 'イベント', type: 'scatter', xAxisIndex: 2, yAxisIndex: 2, symbolSize: 10, data: eventSeriesData }
+        ]
+    };
+
+    mainChart.setOption(option, true);
+}
+
+/**
+ * イベント散布図データを作成するヘルパー関数
+ */
+function createEventSeriesData(xAxisData, eventCategories) {
+    const eventSeriesData = [];
+    state.events.forEach(event => {
+        if (state.annotations[event.event_type]) {
+            const yIndex = eventCategories.indexOf(event.event_type);
+            if (yIndex !== -1) {
+                let xValue = event.event_date;
+                if (state.xAxisType === 'usage') {
+                    const estimated = estimateUsageCount(event.event_date);
+                    if (estimated !== null) {
+                        xValue = findClosestUsage(estimated, xAxisData);
+                    } else {
+                        return;
+                    }
+                }
+                eventSeriesData.push({
+                    value: [xValue, event.event_type],
+                    itemStyle: { color: getEventColor(event.event_type) },
+                    eventInfo: event
+                });
+            }
+        }
+    });
+    return eventSeriesData;
+}
+
+
+
 function renderOverviewChart(xAxisData, yAxisData) {
     if (!overviewChart) return;
 
@@ -1434,6 +1842,7 @@ async function loadFromURL() {
                 const elChar = document.getElementById('characteristic-select-1');
                 if (elChar) elChar.value = s1Char;
                 state.series[0].characteristicId = s1Char;
+                checkVarTypeAndToggleAggregation(1); // UI状態復元
             }
             if (s1Agg) {
                 const elAgg = document.getElementById('aggregation-method-1');
@@ -1465,6 +1874,7 @@ async function loadFromURL() {
                     const elChar = document.getElementById('characteristic-select-2');
                     if (elChar) elChar.value = s2Char;
                     state.series[1].characteristicId = s2Char;
+                    checkVarTypeAndToggleAggregation(2); // UI状態復元
                 }
                 if (s2Agg) {
                     const elAgg = document.getElementById('aggregation-method-2');
@@ -1573,110 +1983,230 @@ function copyURL() {
 }
 
 // ===================================
-// プリセット管理
+// ===================================
+// プリセット機能 (New Implementation)
 // ===================================
 
-const PRESET_KEY = 'machine_viz_history_presets';
+function initPresets() {
+    const presetBtn = document.getElementById('preset-btn');
+    const presetMenu = document.getElementById('preset-menu');
+    const saveBtn = document.getElementById('save-preset-btn');
+    const nameInput = document.getElementById('preset-name-input');
 
-function getPresets() {
-    const json = localStorage.getItem(PRESET_KEY);
-    return json ? JSON.parse(json) : {};
+    if (!presetBtn || !presetMenu) return;
+
+    // Toggle menu
+    presetBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        presetMenu.classList.toggle('hidden');
+        renderPresetMenu(); // Refresh list on open
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        if (!presetBtn.contains(e.target) && !presetMenu.contains(e.target)) {
+            presetMenu.classList.add('hidden');
+        }
+    });
+
+    // Don't close when clicking inside menu
+    presetMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    // Save Preset
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            if (!name) {
+                showToast('プリセット名を入力してください', 'warning');
+                return;
+            }
+            savePreset(name);
+            nameInput.value = '';
+            renderPresetMenu();
+            showToast(`プリセット「${name}」を保存しました`, 'success');
+        });
+    }
 }
 
-function savePresets(presets) {
-    localStorage.setItem(PRESET_KEY, JSON.stringify(presets));
+function loadPresetsFromStorage() {
+    const json = localStorage.getItem('history_presets_v2');
+    if (!json) return [];
+    try {
+        return JSON.parse(json);
+    } catch (e) {
+        console.error('Presets parse error', e);
+        return [];
+    }
 }
 
-function loadPresets() {
-    const presets = getPresets();
-    const select = document.getElementById('preset-select');
-    if (!select) return;
+function savePreset(name) {
+    const presets = loadPresetsFromStorage();
 
-    select.innerHTML = '<option value="">プリセットを選択</option>';
-    Object.keys(presets).forEach(name => {
-        select.innerHTML += `<option value="${name}">${name}</option>`;
+    // Capture current state
+    const newPreset = {
+        name: name,
+        timestamp: new Date().toISOString(),
+        data: {
+            machineNumber: state.machineNumber,
+            series: JSON.parse(JSON.stringify(state.series)),
+            xAxisType: state.xAxisType,
+            viewStartDate: state.startDate, // Save input date
+            viewEndDate: state.endDate, // Save input date
+            annotations: { ...state.annotations }
+        }
+    };
+
+    // Check if exists
+    const existingIndex = presets.findIndex(p => p.name === name);
+    if (existingIndex >= 0) {
+        if (!confirm(`プリセット「${name}」は既に存在します。上書きしますか？`)) return;
+        presets[existingIndex] = newPreset;
+    } else {
+        presets.push(newPreset);
+    }
+
+    localStorage.setItem('history_presets_v2', JSON.stringify(presets));
+}
+
+function deletePreset(index) {
+    const presets = loadPresetsFromStorage();
+    if (index >= 0 && index < presets.length) {
+        presets.splice(index, 1);
+        localStorage.setItem('history_presets_v2', JSON.stringify(presets));
+        renderPresetMenu();
+    }
+}
+
+function renderPresetMenu() {
+    const listEl = document.getElementById('preset-list');
+    if (!listEl) return;
+
+    const presets = loadPresetsFromStorage();
+    listEl.innerHTML = '';
+
+    if (presets.length === 0) {
+        listEl.innerHTML = '<div class="empty-message">保存されたプリセットはありません</div>';
+        return;
+    }
+
+    presets.forEach((p, index) => {
+        const item = document.createElement('div');
+        item.className = 'preset-item';
+
+        // Inline style for layout (mimicking defect_trend css if present, or fallback)
+        item.style.display = 'flex';
+        item.style.justifyContent = 'space-between';
+        item.style.padding = '4px 8px';
+        item.style.borderBottom = '1px solid #eee';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'preset-name';
+        nameSpan.textContent = p.name;
+        nameSpan.style.cursor = 'pointer';
+        nameSpan.style.flexGrow = '1';
+        nameSpan.onclick = () => loadPreset(p);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'preset-delete-btn';
+        deleteBtn.innerHTML = '×';
+        deleteBtn.title = '削除';
+        deleteBtn.style.background = 'none';
+        deleteBtn.style.border = 'none';
+        deleteBtn.style.cursor = 'pointer';
+        deleteBtn.style.color = '#999';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (confirm(`プリセット「${p.name}」を削除しますか？`)) {
+                deletePreset(index);
+            }
+        };
+
+        item.appendChild(nameSpan);
+        item.appendChild(deleteBtn);
+        listEl.appendChild(item);
     });
 }
 
-function savePreset() {
-    const name = prompt('プリセット名を入力してください:');
-    if (!name) return;
+function loadPreset(preset) {
+    const d = preset.data;
+    if (!d) return;
 
-    const presets = getPresets();
-    presets[name] = {
-        machineNumber: state.machineNumber, // Save machine number
-        category: state.category,
-        characteristicId: state.characteristicId,
-        chartType: state.chartType,
-        xAxisType: state.xAxisType,
-        annotations: { ...state.annotations },
-    };
+    // Restore State
+    state.machineNumber = d.machineNumber || '';
 
-    savePresets(presets);
-    loadPresets();
-    document.getElementById('preset-select').value = name;
-    alert('プリセットを保存しました');
-}
+    // Restore Series
+    if (d.series) {
+        state.series = JSON.parse(JSON.stringify(d.series));
+    }
 
-async function applyPreset() {
-    const name = document.getElementById('preset-select').value;
-    if (!name) return;
+    state.xAxisType = d.xAxisType || 'monthly';
+    state.annotations = d.annotations || state.annotations;
+    if (d.viewStartDate) state.startDate = d.viewStartDate;
+    if (d.viewEndDate) state.endDate = d.viewEndDate;
 
-    const presets = getPresets();
-    const preset = presets[name];
-    if (!preset) return;
-
-    // 状態を復元（系列1のみ対応）
-    state.machineNumber = preset.machineNumber || ''; // Restore machine number
-    state.series[0].category = preset.category || '';
-    state.series[0].characteristicId = preset.characteristicId || '';
-    state.chartType = preset.chartType || 'line';
-    state.xAxisType = preset.xAxisType || 'monthly';
-    state.annotations = preset.annotations || state.annotations;
-
-    // UIを更新
+    // UI Updates
     const machineInput = document.getElementById('machine-number');
     if (machineInput) machineInput.value = state.machineNumber;
 
-    const catEl = document.getElementById('category-select-1');
-    if (catEl) catEl.value = state.series[0].category;
+    // Restore Inputs
+    const startInput = document.getElementById('start-date');
+    const endInput = document.getElementById('end-date');
+    if (startInput) startInput.value = state.startDate;
+    if (endInput) endInput.value = state.endDate;
 
-    await updateCharacteristicOptions(1);
+    // Restore Series 1 UI
+    const catEl1 = document.getElementById('category-select-1');
+    if (catEl1) catEl1.value = state.series[0].category;
 
-    const charEl = document.getElementById('characteristic-select-1');
-    if (charEl) charEl.value = state.series[0].characteristicId;
+    // Async restoration chain
+    updateCharacteristicOptions(1).then(() => {
+        const charEl1 = document.getElementById('characteristic-select-1');
+        if (charEl1) charEl1.value = state.series[0].characteristicId;
+        document.getElementById('aggregation-method-1').value = state.series[0].aggregationMethod;
+        checkVarTypeAndToggleAggregation(1); // Update visibility
 
-    const chartEl = document.querySelector(`input[name="chart-type"][value="${state.chartType}"]`);
-    if (chartEl) chartEl.checked = true;
+        // Restore Series 2 UI
+        const s2 = state.series[1];
+        toggleSeries2(s2.visible);
+        if (s2.visible) {
+            document.getElementById('category-select-2').value = s2.category;
+            updateCharacteristicOptions(2).then(() => {
+                document.getElementById('characteristic-select-2').value = s2.characteristicId;
+                document.getElementById('aggregation-method-2').value = s2.aggregationMethod;
+                checkVarTypeAndToggleAggregation(2); // Update visibility
+                finalizeLoad();
+            });
+        } else {
+            finalizeLoad();
+        }
+    });
 
-    document.getElementById('x-axis-type').value = state.xAxisType;
+    // Common UI (X-axis, etc)
+    const xAxisEl = document.getElementById('x-axis-type');
+    if (xAxisEl) {
+        xAxisEl.value = state.xAxisType;
+        // Trigger change event logic manually or call handler? 
+        // Better to simulate change or call toggle logic directly if extracted.
+        // For now, simple toggles:
+        toggleDateInputs(state.xAxisType === 'daily');
+    }
 
     Object.entries(state.annotations).forEach(([type, checked]) => {
         const checkbox = document.querySelector(`.annotation-toggle[data-type="${type}"]`);
         if (checkbox) checkbox.checked = checked;
     });
 
-    // データを再読み込み
+    showToast(`プリセット「${preset.name}」を読み込みました`, 'info');
+    document.getElementById('preset-menu').classList.add('hidden');
+}
+
+function finalizeLoad() {
+    updateURL();
     if (state.machineNumber) {
         loadData();
     }
-}
-
-
-function deletePreset() {
-    const name = document.getElementById('preset-select').value;
-    if (!name) {
-        alert('削除するプリセットを選択してください');
-        return;
-    }
-
-    if (!confirm(`プリセット「${name}」を削除しますか？`)) return;
-
-    const presets = getPresets();
-    delete presets[name];
-    savePresets(presets);
-    loadPresets();
-    alert('プリセットを削除しました');
 }
 
 // ===================================
@@ -1706,8 +2236,41 @@ function downloadCSV() {
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `特性値_${state.machineNumber}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `machine_data_${state.machineNumber}.csv`;
     a.click();
 
     URL.revokeObjectURL(url);
+}
+
+/**
+ * 特性値の種類に基づいて集計ドロップダウンの表示/非表示を切り替える
+ */
+function checkVarTypeAndToggleAggregation(seriesId) {
+    const idx = seriesId - 1;
+    const select = document.getElementById(`characteristic-select-${seriesId}`);
+    if (!select) return;
+
+    const selectedOption = select.options[select.selectedIndex];
+    const optgroup = selectedOption?.parentElement;
+
+    // varType更新
+    if (optgroup?.tagName === 'OPTGROUP') {
+        state.series[idx].varType = optgroup.label === '質的変数' ? 'qualitative' : 'quantitative';
+    } else {
+        // 未選択の場合はタイプ不明だが、とりあえず量的変数扱い（デフォルト）にしておくか、空にする
+        state.series[idx].varType = '';
+    }
+
+    // UI制御
+    const aggSelect = document.getElementById(`aggregation-method-${seriesId}`);
+    const filterGroup = aggSelect?.closest('.filter-group');
+    if (filterGroup) {
+        if (state.series[idx].varType === 'qualitative') {
+            // 質的変数の場合、集計は不要なので非表示
+            filterGroup.style.display = 'none';
+        } else {
+            // 量的変数または未選択の場合は表示
+            filterGroup.style.display = '';
+        }
+    }
 }
