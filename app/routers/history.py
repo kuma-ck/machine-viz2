@@ -1,6 +1,6 @@
 """機番履歴表示API"""
 from datetime import date
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Request, Query, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -111,3 +111,83 @@ async def get_categories():
 async def get_characteristic_ids(category: str):
     """指定カテゴリーの特性値ID一覧を取得"""
     return dummy_data.get_available_characteristic_ids(category)
+
+
+# ==========================================
+# 複数機番比較用API
+# ==========================================
+
+MAX_COMPARISON_MACHINES = 5  # 同時比較可能な最大機番数
+
+
+@router.get("/api/machines/batch")
+async def get_machines_batch(
+    machine_numbers: str = Query(..., description="カンマ区切りの機番リスト"),
+    db: AsyncSession = Depends(get_db)
+):
+    """複数機番の属性を一括取得"""
+    numbers = [n.strip() for n in machine_numbers.split(",") if n.strip()]
+    
+    if len(numbers) > MAX_COMPARISON_MACHINES:
+        return {"error": f"同時に比較できる機番は最大{MAX_COMPARISON_MACHINES}台までです"}
+    
+    results = {}
+    for num in numbers:
+        if settings.USE_DUMMY_DATA:
+            results[num] = dummy_data.generate_dummy_machine(num)
+        else:
+            machine = await crud.get_machine_by_number(db, num)
+            if machine:
+                results[num] = machine
+            else:
+                results[num] = {"error": "Machine not found"}
+    
+    return {"machines": results}
+
+
+@router.get("/api/characteristics/compare")
+async def get_characteristics_compare(
+    machine_numbers: str = Query(..., description="カンマ区切りの機番リスト"),
+    category: Optional[str] = None,
+    characteristic_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    x_axis_type: str = Query(default="monthly", regex="^(monthly|daily|usage)$"),
+    aggregation_method: str = Query(default="latest", regex="^(average|max|min|sum|latest)$"),
+    db: AsyncSession = Depends(get_db)
+):
+    """複数機番の特性値を比較用に一括取得"""
+    numbers = [n.strip() for n in machine_numbers.split(",") if n.strip()]
+    
+    if len(numbers) > MAX_COMPARISON_MACHINES:
+        return {"error": f"同時に比較できる機番は最大{MAX_COMPARISON_MACHINES}台までです"}
+    
+    start = date.fromisoformat(start_date) if start_date else None
+    end = date.fromisoformat(end_date) if end_date else None
+    
+    results = {}
+    for num in numbers:
+        if settings.USE_DUMMY_DATA:
+            values = dummy_data.generate_dummy_characteristics(
+                machine_number=num,
+                category=category,
+                characteristic_id=characteristic_id,
+                start_date=start,
+                end_date=end,
+                x_axis_type=x_axis_type,
+                aggregation_method=aggregation_method,
+            )
+        else:
+            values = await crud.get_characteristics(
+                db,
+                machine_number=num,
+                category=category,
+                characteristic_id=characteristic_id,
+                start_date=start,
+                end_date=end,
+                x_axis_type=x_axis_type,
+                aggregation_method=aggregation_method,
+            )
+        results[num] = values
+    
+    return {"data": results, "machine_numbers": numbers}

@@ -29,7 +29,11 @@
             </div>
             <div class="toolbar-divider"></div>
             <div class="toolbar-group">
-                <input type="text" id="machine-number" class="form-input form-input-sm" placeholder="機番を入力">
+                <input type="text" id="machine-number" class="form-input form-input-sm" placeholder="機番を入力（複数はカンマ区切り）"
+                    style="width: 220px;">
+                <span id="comparison-badge" class="badge badge-info" style="display: none;">
+                    比較モード: <span id="comparison-count">0</span>台
+                </span>
                 <button id="load-data-btn" class="btn btn-sm btn-primary">読み込み</button>
             </div>
         </div>

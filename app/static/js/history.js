@@ -6,12 +6,23 @@
 // グローバル状態
 // ===================================
 
+// 機番間比較の最大台数
+const MAX_COMPARISON_MACHINES = 5;
+
+// 機番別の色パレット（比較モード用）
+const MACHINE_COLORS = [
+    '#5470c6', // 青
+    '#91cc75', // 緑
+    '#fac858', // 黄
+    '#ee6666', // 赤
+    '#73c0de', // 水色
+];
+
 const state = {
-    machineNumber: '',
-    machineInfo: null,
-    events: [],
-    machineNumber: '',
-    machineInfo: null,
+    machineNumber: '',         // 後方互換用（単一機番）
+    machineNumbers: [],        // 複数機番対応
+    machineInfos: {},          // 機番 -> 機番情報のマップ
+    machineInfo: null,         // 後方互換用（単一機番の場合）
     events: [],
     // characteristics: [], // getter/setterに移行
     xAxisType: 'monthly',
@@ -330,16 +341,38 @@ function toggleSeries2(show) {
 
 async function loadData() {
     const input = document.getElementById('machine-number');
-    const machineNumber = input?.value.trim();
+    const inputValue = input?.value.trim();
 
-    if (!machineNumber) {
+    if (!inputValue) {
         showToast('機番を入力してください', 'warning');
         return;
     }
 
-    state.machineNumber = machineNumber;
+    // カンマ区切りまたは改行区切りで複数機番をパース
+    const machineNumbers = inputValue
+        .split(/[,\n]/)
+        .map(n => n.trim())
+        .filter(n => n.length > 0);
+
+    if (machineNumbers.length === 0) {
+        showToast('機番を入力してください', 'warning');
+        return;
+    }
+
+    if (machineNumbers.length > MAX_COMPARISON_MACHINES) {
+        showToast(`同時に比較できる機番は最大${MAX_COMPARISON_MACHINES}台までです`, 'warning');
+        return;
+    }
+
+    // 状態を更新
+    state.machineNumbers = machineNumbers;
+    state.machineNumber = machineNumbers[0]; // 後方互換用
+
+    // 比較モードバッジの更新
+    updateComparisonBadge();
 
     // Clear previous data
+    state.machineInfos = {};
     state.machineInfo = null;
     state.events = [];
     state.series.forEach(s => s.data = []);
@@ -348,47 +381,78 @@ async function loadData() {
     showLoading(true);
 
     try {
-        // 並行してデータを取得
-        const [machineRes, eventsRes] = await Promise.all([
-            fetch(`/history/api/machine/${encodeURIComponent(machineNumber)}`),
-            fetch(`/history/api/events/${encodeURIComponent(machineNumber)}`),
-        ]);
+        const isCompareMode = machineNumbers.length > 1;
 
-        // レスポンスをチェック
-        if (!machineRes.ok) {
-            showToast('機番情報の取得に失敗しました', 'error');
-            state.machineInfo = null; // Ensure null
-            toggleEmptyState(true);
-            showLoading(false);
-            return;
+        if (isCompareMode) {
+            // 比較モード: 複数機番の属性を一括取得
+            const machineNumbersParam = machineNumbers.join(',');
+            const machinesRes = await fetch(`/history/api/machines/batch?machine_numbers=${encodeURIComponent(machineNumbersParam)}`);
+            const machinesData = await machinesRes.json();
+
+            if (machinesData.error) {
+                showToast(machinesData.error, 'error');
+                showLoading(false);
+                return;
+            }
+
+            state.machineInfos = machinesData.machines || {};
+            state.machineInfo = Object.values(state.machineInfos)[0] || null;
+
+            // 見つからなかった機番をチェック
+            const notFoundMachines = Object.entries(state.machineInfos)
+                .filter(([_, info]) => info.error)
+                .map(([num, _]) => num);
+
+            if (notFoundMachines.length > 0) {
+                showToast(`以下の機番が見つかりません: ${notFoundMachines.join(', ')}`, 'warning');
+            }
+
+            // イベントは比較モードでは最初の機番のみ表示
+            const eventsRes = await fetch(`/history/api/events/${encodeURIComponent(machineNumbers[0])}`);
+            const eventsData = await eventsRes.json();
+            state.events = eventsData.events || [];
+
+        } else {
+            // 単一機番モード: 従来通り
+            const [machineRes, eventsRes] = await Promise.all([
+                fetch(`/history/api/machine/${encodeURIComponent(machineNumbers[0])}`),
+                fetch(`/history/api/events/${encodeURIComponent(machineNumbers[0])}`),
+            ]);
+
+            if (!machineRes.ok) {
+                showToast('機番情報の取得に失敗しました', 'error');
+                state.machineInfo = null;
+                toggleEmptyState(true);
+                showLoading(false);
+                return;
+            }
+
+            state.machineInfo = await machineRes.json();
+            state.machineInfos[machineNumbers[0]] = state.machineInfo;
+
+            if (state.machineInfo.error) {
+                showToast(`機番 ${machineNumbers[0]} が見つかりません`, 'warning');
+                state.machineInfo = null;
+                toggleEmptyState(true);
+                showLoading(false);
+                return;
+            }
+
+            const eventsData = await eventsRes.json();
+            state.events = eventsData.events || [];
         }
-
-        state.machineInfo = await machineRes.json();
-
-        // 機番が見つからない場合
-        if (state.machineInfo.error) {
-            showToast(`機番 ${machineNumber} が見つかりません`, 'warning');
-            state.machineInfo = null;
-            toggleEmptyState(true);
-            showLoading(false);
-            return;
-        }
-
-        const eventsData = await eventsRes.json();
-        state.events = eventsData.events || [];
 
         // データ読み込み完了
         state.dataLoaded = true;
         updateStepStatus();
 
-        // 機番属性を表示
+        // 機番属性を表示（比較モードでは複数表示）
         renderMachineInfo();
 
         // イベント一覧を表示
         renderEventsTable();
 
         // カテゴリーと特性値が選択されていればグラフも表示
-        // シリーズ1またはシリーズ2が設定されていればロード
         const hasSeries1 = state.series[0].category && state.series[0].characteristicId;
         const hasSeries2 = state.series[1].visible && state.series[1].category && state.series[1].characteristicId;
 
@@ -396,13 +460,12 @@ async function loadData() {
             await loadCharacteristics();
         } else {
             // 機番情報は読み込めたが、系列が選択されていない場合
-            if (state.machineInfo) {
+            if (state.machineInfo || Object.keys(state.machineInfos).length > 0) {
                 toggleEmptyState(false);
                 const chartDom = document.getElementById('main-chart');
                 if (chartDom) {
-                    chartDom.style.display = 'flex'; // 表示する
+                    chartDom.style.display = 'flex';
                     chartDom.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:100%; width:100%; color:#888; font-weight:bold; font-size: 1.2rem;">カテゴリーと特性値を選択してグラフを表示してください</div>';
-                    // Reset chart instance if exists
                     if (mainChart) {
                         mainChart.dispose();
                         mainChart = null;
@@ -421,6 +484,21 @@ async function loadData() {
         showToast('データの読み込みに失敗しました', 'error');
     } finally {
         showLoading(false);
+    }
+}
+
+// 比較モードバッジの更新
+function updateComparisonBadge() {
+    const badge = document.getElementById('comparison-badge');
+    const countSpan = document.getElementById('comparison-count');
+
+    if (!badge || !countSpan) return;
+
+    if (state.machineNumbers.length > 1) {
+        badge.style.display = 'inline-block';
+        countSpan.textContent = state.machineNumbers.length;
+    } else {
+        badge.style.display = 'none';
     }
 }
 
@@ -500,15 +578,19 @@ function showNoDataMessage() {
 }
 
 async function loadCharacteristics() {
-    if (!state.machineNumber) return;
+    if (!state.machineNumber && state.machineNumbers.length === 0) return;
 
     showLoading(true);
+
+    const isCompareMode = state.machineNumbers.length > 1;
+    const machineNumbers = isCompareMode ? state.machineNumbers : [state.machineNumber];
 
     // 各系列のデータを並行取得
     const promises = state.series.map(async (s, index) => {
         // 表示かつ設定済みの場合のみ取得
         if (!s.visible || !s.category || !s.characteristicId) {
             s.data = [];
+            s.compareData = {}; // 比較モード用データをクリア
             return;
         }
 
@@ -527,12 +609,34 @@ async function loadCharacteristics() {
         }
 
         try {
-            const res = await fetch(`/history/api/characteristics/${encodeURIComponent(state.machineNumber)}?${params}`);
-            const data = await res.json();
-            s.data = data.values || [];
+            if (isCompareMode) {
+                // 比較モード: 複数機番の特性値を一括取得
+                params.set('machine_numbers', machineNumbers.join(','));
+                const res = await fetch(`/history/api/characteristics/compare?${params}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    console.error(`系列${index + 1}エラー:`, data.error);
+                    s.data = [];
+                    s.compareData = {};
+                } else {
+                    // 比較モードではcompareDataに機番別データを格納
+                    s.compareData = data.data || {};
+                    // 後方互換: 最初の機番のデータをdataに設定
+                    const firstMachine = machineNumbers[0];
+                    s.data = s.compareData[firstMachine] || [];
+                }
+            } else {
+                // 単一機番モード: 従来通り
+                const res = await fetch(`/history/api/characteristics/${encodeURIComponent(state.machineNumber)}?${params}`);
+                const data = await res.json();
+                s.data = data.values || [];
+                s.compareData = {}; // 比較データはクリア
+            }
         } catch (error) {
             console.error(`系列${index + 1}読み込みエラー:`, error);
             s.data = [];
+            s.compareData = {};
         }
     });
 
@@ -540,7 +644,15 @@ async function loadCharacteristics() {
         await Promise.all(promises);
 
         // グラフ表示完了（データがある場合のみ）
-        const hasData = state.series.some(s => s.visible && s.data.length > 0);
+        const hasData = state.series.some(s => {
+            if (s.visible) {
+                if (isCompareMode) {
+                    return Object.values(s.compareData || {}).some(v => v && v.length > 0);
+                }
+                return s.data.length > 0;
+            }
+            return false;
+        });
         const hasSelection = state.series.some(s => s.visible && s.category && s.characteristicId);
 
         if (hasData) {
@@ -623,38 +735,75 @@ function renderMachineInfo() {
     const container = document.getElementById('machine-info');
     const content = document.getElementById('machine-info-content');
 
-    if (!container || !content || !state.machineInfo) return;
+    if (!container || !content) return;
 
-    // 新レイアウトでは常に表示
-    container.style.display = 'block';
+    const isCompareMode = state.machineNumbers.length > 1;
 
-    const info = state.machineInfo;
-    content.innerHTML = `
-        <div class="info-item">
-            <span class="info-label">機番</span>
-            <span class="info-value">${info.machine_number}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">機種</span>
-            <span class="info-value">${info.model_series} / ${info.model_number}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">製造月</span>
-            <span class="info-value">${info.manufacture_month}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">稼働開始</span>
-            <span class="info-value">${info.operation_start_month || '-'}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">FWバージョン</span>
-            <span class="info-value">${info.current_fw_version || '-'}</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">累計使用回数</span>
-            <span class="info-value">${info.total_usage_count?.toLocaleString() || '-'}</span>
-        </div>
-    `;
+    // 比較モードまたは単一機番の表示
+    if (isCompareMode) {
+        // 比較モード: 複数機番の情報をコンパクトに表示
+        const machines = state.machineNumbers
+            .map(num => state.machineInfos[num])
+            .filter(info => info && !info.error);
+
+        if (machines.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'block';
+        content.innerHTML = machines.map((info, index) => `
+            <div class="compare-machine-card" style="border-left: 3px solid ${MACHINE_COLORS[index % MACHINE_COLORS.length]};">
+                <div class="info-item">
+                    <span class="info-label">機番</span>
+                    <span class="info-value" style="font-weight: bold;">${info.machine_number}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">機種</span>
+                    <span class="info-value">${info.model_series}/${info.model_number}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">製造月</span>
+                    <span class="info-value">${info.manufacture_month}</span>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        // 単一機番モード: 従来通り
+        if (!state.machineInfo) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'block';
+        const info = state.machineInfo;
+        content.innerHTML = `
+            <div class="info-item">
+                <span class="info-label">機番</span>
+                <span class="info-value">${info.machine_number}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">機種</span>
+                <span class="info-value">${info.model_series} / ${info.model_number}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">製造月</span>
+                <span class="info-value">${info.manufacture_month}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">稼働開始</span>
+                <span class="info-value">${info.operation_start_month || '-'}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">FWバージョン</span>
+                <span class="info-value">${info.current_fw_version || '-'}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">累計使用回数</span>
+                <span class="info-value">${info.total_usage_count?.toLocaleString() || '-'}</span>
+            </div>
+        `;
+    }
 }
 
 function renderEventsTable() {
@@ -707,31 +856,54 @@ function renderChart() {
         }
     }
 
-    const hasData = state.series.some(s => s.visible && s.data.length > 0);
+    const isCompareMode = state.machineNumbers.length > 1;
+
+    // データ有無の判定（比較モード対応）
+    const hasData = state.series.some(s => {
+        if (!s.visible) return false;
+        if (isCompareMode) {
+            return Object.values(s.compareData || {}).some(v => v && v.length > 0);
+        }
+        return s.data.length > 0;
+    });
+
     if (!mainChart || !hasData) {
         mainChart?.clear();
         return;
     }
 
-    const visibleSeries = state.series.filter(s => s.visible && s.data.length > 0);
+    const visibleSeries = state.series.filter(s => {
+        if (!s.visible) return false;
+        if (isCompareMode) {
+            return Object.values(s.compareData || {}).some(v => v && v.length > 0);
+        }
+        return s.data.length > 0;
+    });
 
     // 各系列の表示タイプを決定（varTypeが未設定の場合はデータから判定）
     visibleSeries.forEach(s => {
         if (!s.varType) {
             // データから判定：value_textがあり、かつvalue_numericがない場合は質的変数
-            s.varType = s.data.some(d => d.value_text && d.value_numeric == null) ? 'qualitative' : 'quantitative';
+            const dataToCheck = isCompareMode
+                ? Object.values(s.compareData || {})[0] || []
+                : s.data;
+            s.varType = dataToCheck.some(d => d.value_text && d.value_numeric == null) ? 'qualitative' : 'quantitative';
         }
     });
 
     const types = visibleSeries.map(s => s.varType);
-    console.log('Render chart with types:', types);
+    console.log('Render chart with types:', types, 'Compare mode:', isCompareMode);
 
     // 表示パターンに応じて描画
     if (mainChart) mainChart.clear();
 
     if (types.every(t => t === 'quantitative')) {
         // 全て量的変数 → 折れ線チャート（2軸対応）
-        renderLineChart();
+        if (isCompareMode) {
+            renderCompareLineChart(visibleSeries);
+        } else {
+            renderLineChart();
+        }
     } else if (types.every(t => t === 'qualitative')) {
         // 全て質的変数 → カラーチャート（複数行対応）
         renderDualColorChart(visibleSeries);
@@ -739,6 +911,121 @@ function renderChart() {
         // 混合 → 折れ線＋カラーバー
         renderMixedChart(visibleSeries);
     }
+}
+
+// 比較モード専用の折れ線チャート
+function renderCompareLineChart(visibleSeries) {
+    const machineNumbers = state.machineNumbers;
+    const s = visibleSeries[0]; // 比較モードでは系列1のみ対応
+
+    if (!s || !s.compareData) {
+        mainChart?.clear();
+        return;
+    }
+
+    // X軸データの統合（全機番の和集合）
+    const allXValues = new Set();
+    machineNumbers.forEach(machineNum => {
+        const data = s.compareData[machineNum] || [];
+        data.forEach(d => {
+            if (state.xAxisType === 'usage') {
+                allXValues.add(d.usage_count);
+            } else {
+                allXValues.add(d.record_date);
+            }
+        });
+    });
+
+    // ソート
+    const xAxisData = Array.from(allXValues).sort((a, b) => {
+        if (state.xAxisType === 'usage') {
+            return Number(a) - Number(b);
+        } else {
+            return a.localeCompare(b);
+        }
+    });
+
+    // 各機番のデータをシリーズとして作成
+    const chartSeries = machineNumbers.map((machineNum, index) => {
+        const data = s.compareData[machineNum] || [];
+        const map = new Map();
+        data.forEach(d => {
+            const k = state.xAxisType === 'usage' ? d.usage_count : d.record_date;
+            map.set(k, d.value_numeric);
+        });
+
+        // X軸データに合わせて値を埋める
+        const seriesData = xAxisData.map(x => map.get(x) !== undefined ? map.get(x) : null);
+
+        return {
+            name: machineNum, // 凡例には機番を表示
+            type: 'line',
+            data: seriesData,
+            connectNulls: true,
+            itemStyle: { color: MACHINE_COLORS[index % MACHINE_COLORS.length] },
+            lineStyle: { color: MACHINE_COLORS[index % MACHINE_COLORS.length] }
+        };
+    });
+
+    const option = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'cross' },
+            formatter: (params) => {
+                let html = '';
+                if (params.length > 0) {
+                    html += `<strong>${params[0].axisValue}</strong><br/>`;
+                }
+                params.forEach(p => {
+                    if (p.value != null) {
+                        html += `${p.marker} ${p.seriesName}: ${p.value}<br/>`;
+                    }
+                });
+                return html;
+            }
+        },
+        legend: {
+            show: true,
+            data: machineNumbers,
+            type: 'scroll', // 機番が多い場合スクロール可能
+            top: 0
+        },
+        grid: {
+            left: '80',
+            right: '40',
+            top: '60',
+            bottom: '80'
+        },
+        xAxis: {
+            type: 'category',
+            data: xAxisData,
+            name: state.xAxisType === 'usage' ? '使用回数' : '日付',
+            axisLabel: {
+                formatter: state.xAxisType === 'usage' ? (v) => Number(v).toLocaleString() : undefined
+            }
+        },
+        yAxis: {
+            type: 'value',
+            name: `${s.category} / ${s.characteristicId}`
+        },
+        dataZoom: [
+            {
+                type: 'inside',
+                start: 0,
+                end: 100,
+            },
+            {
+                type: 'slider',
+                start: 0,
+                end: 100,
+                bottom: 10,
+                height: 30
+            }
+        ],
+        series: chartSeries
+    };
+
+    mainChart.setOption(option, true);
 }
 
 
@@ -1583,7 +1870,8 @@ function renderMixedChart(visibleSeries) {
                 type: 'line',
                 xAxisIndex: 0,
                 yAxisIndex: 0,
-                showSymbol: false,
+                showSymbol: true,
+                connectNulls: true,  // null値があっても線をつなげる
                 data: s.data,
             })),
             ...colorBarData.map(s => ({

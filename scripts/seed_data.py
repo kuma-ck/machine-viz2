@@ -18,6 +18,9 @@ async def seed_data(machine_count: int = 50, clear: bool = False):
     
     print("Database seeding started...")
     
+    # Ensure tables exist
+    await init_db()
+    
     async with async_session_maker() as session:
         if clear:
             print("Clearing existing data...")
